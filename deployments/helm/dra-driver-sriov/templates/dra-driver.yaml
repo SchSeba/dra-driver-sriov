@@ -43,7 +43,14 @@ spec:
           {{- toYaml .Values.kubeletPlugin.containers.plugin.securityContext | nindent 10 }}
         image: {{ include "dra-driver-sriov.fullimage" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        command: ["dra-driver-sriov"]
+        command:
+          - dlv
+          - --listen=:2345
+          - --headless=true
+          - --api-version=2
+          - --accept-multiclient
+          - exec
+          - /usr/bin/dra-driver-sriov
         resources:
           {{- toYaml .Values.kubeletPlugin.containers.plugin.resources | nindent 10 }}
         {{/*

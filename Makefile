@@ -46,8 +46,10 @@ cmd-%: COMMAND_BUILD_OPTIONS = -o $(PREFIX)/$(*)
 endif
 cmds: $(CMD_TARGETS)
 $(CMD_TARGETS): cmd-%:
-	CGO_LDFLAGS_ALLOW='-Wl,--unresolved-symbols=ignore-in-object-files' GOOS=$(GOOS) GOARCH=$(GOARCH) \
-		go build -ldflags "-s -w -X main.version=$(VERSION)" $(COMMAND_BUILD_OPTIONS) $(MODULE)/cmd/$(*)
+	#CGO_LDFLAGS_ALLOW='-Wl,--unresolved-symbols=ignore-in-object-files' GOOS=$(GOOS) GOARCH=$(GOARCH) \
+#		go build -ldflags "-s -w -X main.version=$(VERSION)" $(COMMAND_BUILD_OPTIONS) $(MODULE)/cmd/$(*)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) \
+    	go build -gcflags "all=-N -l" -ldflags "-X main.version=$(VERSION)" $(COMMAND_BUILD_OPTIONS) $(MODULE)/cmd/$(*)
 
 build:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build ./...

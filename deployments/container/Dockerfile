@@ -18,7 +18,7 @@ FROM golang:${GOLANG_VERSION} as build
 
 ARG GOARCH=amd64
 
-WORKDIR /build
+WORKDIR /Users/sscheink/Documents/GolangProjects/src/github.com/SchSeba/dra-driver-sriov
 COPY . .
 
 RUN mkdir /artifacts
@@ -36,5 +36,5 @@ LABEL release="N/A"
 LABEL summary="Dynamic Resource Allocation (DRA) resource driver for SR-IOV devices"
 LABEL description="See summary"
 
-RUN yum -y install hwdata pciutils && yum clean all
+RUN yum -y install hwdata pciutils delve && yum clean all
 COPY --from=build /artifacts/dra-driver-sriov /usr/bin/dra-driver-sriov
