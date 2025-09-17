@@ -1,4 +1,4 @@
-package state
+package devicestate
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ import (
 // All of the configs relevant to the driver from the list of possibleConfigs
 // will be returned in order of precedence (from lowest to highest). If no
 // configs are found, nil is returned.
-func GetOpaqueDeviceConfigs(
+func getOpaqueDeviceConfigs(
 	decoder runtime.Decoder,
 	driverName string,
 	possibleConfigs []resourceapi.DeviceAllocationConfiguration,
@@ -29,6 +29,7 @@ func GetOpaqueDeviceConfigs(
 	var classConfigs []resourceapi.DeviceAllocationConfiguration
 	var claimConfigs []resourceapi.DeviceAllocationConfiguration
 	var candidateConfigs []resourceapi.DeviceAllocationConfiguration
+
 	for _, config := range possibleConfigs {
 		switch config.Source {
 		case resourceapi.AllocationConfigSourceClass:
@@ -74,3 +75,28 @@ func GetOpaqueDeviceConfigs(
 
 	return resultConfigs, nil
 }
+
+// func buildAllocatedDeviceStatus(deviceRequestAllocationResult *resourcev1.DeviceRequestAllocationResult, result cnitypes.Result) (*resourcev1.AllocatedDeviceStatus, error) {
+// 	resultBytes, err := json.Marshal(result)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to json.Marshal result (%v): %v", result, err)
+// 	}
+
+// 	cniResult, err := cni100.NewResultFromResult(result)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to NewResultFromResult result (%v): %v", result, err)
+// 	}
+
+// 	data := runtime.RawExtension{
+// 		Raw: resultBytes,
+// 	}
+
+// 	return &resourcev1.AllocatedDeviceStatus{
+// 		Driver:      deviceRequestAllocationResult.Driver,
+// 		Pool:        deviceRequestAllocationResult.Pool,
+// 		Device:      deviceRequestAllocationResult.Device,
+// 		ShareID:     (*string)(deviceRequestAllocationResult.ShareID),
+// 		Data:        &data,
+// 		NetworkData: cniResultToNetworkData(cniResult),
+// 	}, nil
+// }

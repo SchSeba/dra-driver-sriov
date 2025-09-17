@@ -40,10 +40,10 @@ var Decoder runtime.Decoder
 
 // VFConfig holds the set of parameters for configuring a VF.
 type VfConfig struct {
-	metav1.TypeMeta       `json:",inline"`
-	Driver                string `json:"driver,omitempty"`
-	NetAttachDefName      string `json:"netAttachDefName,omitempty"`
-	NetAttachDefNamespace string `json:"netAttachDefNamespace,omitempty"`
+	metav1.TypeMeta  `json:",inline"`
+	Driver           string `json:"driver,omitempty"`
+	IfName           string `json:"ifName,omitempty"`
+	NetAttachDefName string `json:"netAttachDefName,omitempty"`
 }
 
 // DefaultGpuConfig provides the default GPU configuration.
@@ -53,7 +53,9 @@ func DefaultVfConfig() *VfConfig {
 			APIVersion: GroupName + "/" + Version,
 			Kind:       VfConfigKind,
 		},
-		Driver: "default",
+		Driver:           "default",
+		IfName:           "",
+		NetAttachDefName: "",
 	}
 }
 

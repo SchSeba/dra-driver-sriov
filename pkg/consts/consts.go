@@ -19,4 +19,10 @@ package consts
 const (
 	DriverName                 = "virtualfunction.sriovnetwork.openshift.io"
 	DriverPluginCheckpointFile = "checkpoint.json"
+
+	AttributePciAddress  = DriverName + "/pciAddress"
+	AttributePFName      = DriverName + "/PFName"
+	AttributeEswitchMode = DriverName + "/EswitchMode"
+	AttributeVendorID    = DriverName + "/vendor"
+	AttributeDeviceID    = DriverName + "/deviceID"
 )

@@ -3,6 +3,7 @@ package cdi
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	cdiapi "tags.cncf.io/container-device-interface/pkg/cdi"
 	cdiparser "tags.cncf.io/container-device-interface/pkg/parser"
@@ -17,7 +18,7 @@ const (
 	cdiClass  = "nic"
 	cdiKind   = cdiVendor + "/" + cdiClass
 
-	cdiCommonDeviceName = "virtualfunction"
+	cdiCommonDeviceName = "dra-driver-sriov"
 )
 
 type CDIHandler struct {
@@ -68,8 +69,15 @@ func (cdi *CDIHandler) CreateCommonSpecFile() error {
 	return cdi.cache.WriteSpec(spec, specName)
 }
 
-func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices types.PreparedDevices) error {
-	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
+func (cdi *CDIHandler) CreateClaimSpecFile(devices types.PreparedDevices) error {
+	claimUID := ""
+	specName := ""
+	for _, device := range devices {
+		if claimUID == "" {
+			claimUID = string(device.ClaimNamespacedName.UID)
+			specName = cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
+		}
+	}
 
 	spec := &cdispec.Spec{
 		Kind:    cdiKind,
@@ -80,14 +88,15 @@ func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices types.Prepar
 		claimEdits := cdiapi.ContainerEdits{
 			ContainerEdits: &cdispec.ContainerEdits{
 				Env: []string{
-					fmt.Sprintf("SRIOV_DEVICE_%s_RESOURCE_CLAIM=%s", device.DeviceName, claimUID),
+					fmt.Sprintf("SRIOV_DEVICE_%s_RESOURCE_CLAIM=%s", strings.ReplaceAll(device.Device.DeviceName, "-", "_"), claimUID),
 				},
 			},
 		}
+
 		claimEdits.Append(device.ContainerEdits)
 
 		cdiDevice := cdispec.Device{
-			Name:           fmt.Sprintf("%s-%s", claimUID, device.DeviceName),
+			Name:           fmt.Sprintf("%s-%s", claimUID, device.Device.DeviceName),
 			ContainerEdits: *claimEdits.ContainerEdits,
 		}
 

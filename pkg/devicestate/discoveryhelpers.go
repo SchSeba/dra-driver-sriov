@@ -1,4 +1,4 @@
-package state
+package devicestate
 
 import (
 	"fmt"

@@ -26,7 +26,9 @@ spec:
         {{- include "dra-driver-sriov.templateLabels" . | nindent 8 }}
         app.kubernetes.io/component: kubeletplugin
     spec:
+      terminationGracePeriodSeconds: 30
       hostNetwork: true
+      hostPID: true
       {{- if .Values.kubeletPlugin.priorityClassName }}
       priorityClassName: {{ .Values.kubeletPlugin.priorityClassName }}
       {{- end }}
@@ -37,6 +39,26 @@ spec:
       serviceAccountName: {{ include "dra-driver-sriov.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.kubeletPlugin.podSecurityContext | nindent 8 }}
+      initContainers:
+      - args:
+        - --no-sleep
+        image: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.10.0
+        imagePullPolicy: IfNotPresent
+        name: sriov-cni
+        resources:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /host/opt/cni/bin
+          name: cni-bin
+        - mountPath: /host/etc/os-release
+          name: os-release
+          readOnly: true
       containers:
       - name: plugin
         securityContext:
@@ -44,12 +66,12 @@ spec:
         image: {{ include "dra-driver-sriov.fullimage" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command:
-          - dlv
-          - --listen=:2345
-          - --headless=true
-          - --api-version=2
-          - --accept-multiclient
-          - exec
+          # - dlv
+          # - --listen=:2345
+          # - --headless=true
+          # - --api-version=2
+          # - --accept-multiclient
+          # - exec
           - /usr/bin/dra-driver-sriov
         resources:
           {{- toYaml .Values.kubeletPlugin.containers.plugin.resources | nindent 10 }}
@@ -73,6 +95,10 @@ spec:
           value: {{ .Values.kubeletPlugin.kubeletRegistrarDirectoryPath | quote }}
         - name: KUBELET_PLUGINS_DIRECTORY_PATH
           value: {{ .Values.kubeletPlugin.kubeletPluginsDirectoryPath | quote }}
+        - name: NRI_PLUGIN_NAME
+          value: {{ .Values.kubeletPlugin.nriPluginName | quote }}
+        - name: NRI_PLUGIN_IDX
+          value: {{ .Values.kubeletPlugin.nriPluginIndex | quote }}
         - name: NODE_NAME
           valueFrom:
             fieldRef:
@@ -109,7 +135,26 @@ spec:
           mountPath: {{ .Values.kubeletPlugin.kubeletPluginsDirectoryPath | quote }}
         - name: cdi
           mountPath: /var/run/cdi
+        - name: cri-socket
+          mountPath: /var/run/nri/nri.sock
+        - name: netns
+          mountPath: /var/run/netns
+          mountPropagation: HostToContainer
+        - name: cni-results
+          mountPath: /var/lib/cni/
+        - name: cni-bin
+          mountPath: /opt/cni/bin
       volumes:
+      - name: cni-results
+        hostPath:
+          path: /var/lib/cni/
+      - name: netns
+        hostPath:
+          path: /var/run/netns
+      - name: cri-socket
+        hostPath:
+          path: /var/run/nri/nri.sock
+          type: Socket
       - name: plugins-registry
         hostPath:
           path: {{ .Values.kubeletPlugin.kubeletRegistrarDirectoryPath | quote }}
@@ -119,6 +164,13 @@ spec:
       - name: cdi
         hostPath:
           path: /var/run/cdi
+      - hostPath:
+          path: /opt/cni/bin
+        name: cni-bin
+      - hostPath:
+          path: /etc/os-release
+          type: File
+        name: os-release
       {{- with .Values.kubeletPlugin.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

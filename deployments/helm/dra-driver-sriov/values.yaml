@@ -55,6 +55,8 @@ kubeletPlugin:
   affinity: {}
   kubeletRegistrarDirectoryPath: /var/lib/kubelet/plugins_registry
   kubeletPluginsDirectoryPath: /var/lib/kubelet/plugins
+  nriPluginName: dra-driver-sriov
+  nriPluginIndex: 42
   containers:
     init:
       securityContext: {}
@@ -65,7 +67,7 @@ kubeletPlugin:
       resources: {}
       # Port running a gRPC health service checked by a livenessProbe.
       # Set to a negative value to disable the service and the probe.
-      healthcheckPort: 51515
+      healthcheckPort: -1
 
 # Logging configuration
 logging:

@@ -47,8 +47,8 @@ type KubeClientConfig struct {
 }
 
 type ClientSets struct {
-	Core           coreclientset.Interface
-	CtrlruntimeCli client.Client
+	coreclientset.Interface
+	client.Client
 }
 
 func (k *KubeClientConfig) Flags() []cli.Flag {
@@ -120,7 +120,7 @@ func (k *KubeClientConfig) NewClientSets() (ClientSets, error) {
 	}
 
 	return ClientSets{
-		Core:           coreclient,
-		CtrlruntimeCli: ctrlruntimecli,
+		coreclient,
+		ctrlruntimecli,
 	}, nil
 }

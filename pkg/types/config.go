@@ -3,8 +3,6 @@ package types
 import (
 	"path/filepath"
 
-	coreclientset "k8s.io/client-go/kubernetes"
-
 	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 	"github.com/SchSeba/dra-driver-sriov/pkg/flags"
 )
@@ -22,7 +20,7 @@ type Flags struct {
 
 type Config struct {
 	Flags         *Flags
-	CoreClient    coreclientset.Interface
+	K8sClient     flags.ClientSets
 	CancelMainCtx func(error)
 }
 

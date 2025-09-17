@@ -10,7 +10,9 @@ This project implements a DRA driver that allows Kubernetes workloads to request
 
 - **Dynamic Resource Allocation**: Leverages Kubernetes DRA framework for SR-IOV VF management
 - **CDI Integration**: Uses Container Device Interface for device injection into containers
+- **NRI Integration**: Node Resource Interface support for advanced container runtime interaction
 - **Kubernetes Native**: Integrates seamlessly with standard Kubernetes resource request/limit model
+- **CNI Plugin Support**: Integrates with SR-IOV CNI for network configuration
 - **Health Monitoring**: Built-in health check endpoints for monitoring driver status
 - **Helm Deployment**: Easy deployment through Helm charts
 
@@ -19,7 +21,7 @@ This project implements a DRA driver that allows Kubernetes workloads to request
 - Kubernetes 1.34.0 or later (with DRA support enabled)
 - SR-IOV capable network hardware
 - Container runtime with CDI support
-- Go 1.24.0 or later (for building from source)
+- Go 1.24.6 or later (for building from source)
 
 ## Building
 
@@ -115,11 +117,9 @@ spec:
 
 ### Example Workloads
 
-The `demo/` directory contains several example YAML files demonstrating different usage patterns:
+The `demo/` directory contains example YAML files demonstrating usage patterns:
 
-- `gpu-test1.yaml`: Two pods each requesting one distinct GPU
-- `gpu-test2.yaml`: More complex multi-container scenarios
-- Additional examples showing various resource allocation patterns
+- `vf-test1.yaml`: Complete example showing a pod requesting SR-IOV virtual function with NetworkAttachmentDefinition
 
 ## Project Structure
 
@@ -128,10 +128,12 @@ The `demo/` directory contains several example YAML files demonstrating differen
 │   └── dra-driver-sriov/          # Main driver executable
 ├── pkg/
 │   ├── driver/                    # Core driver implementation
-│   ├── state/                     # Device state management
+│   ├── devicestate/               # Device state management
 │   ├── cdi/                       # CDI integration
-│   ├── checkpoint/                # State persistence
 │   ├── cni/                       # CNI plugin integration
+│   ├── nri/                       # NRI (Node Resource Interface) integration
+│   ├── podmanager/                # Pod lifecycle management
+│   ├── api/                       # API definitions (virtualfunction/v1alpha1)
 │   ├── types/                     # Type definitions
 │   ├── consts/                    # Constants
 │   └── flags/                     # Command-line flag handling
@@ -139,7 +141,6 @@ The `demo/` directory contains several example YAML files demonstrating differen
 │   ├── container/                 # Container build configuration
 │   └── helm/                      # Helm chart
 ├── demo/                          # Example workload configurations
-│   ├── scripts/                   # Demo automation scripts
 │   └── *.yaml                     # Example Pod/ResourceClaim manifests
 ├── hack/                          # Build and development scripts
 ├── test/                          # Test suites
@@ -149,16 +150,18 @@ The `demo/` directory contains several example YAML files demonstrating differen
 ### Key Components
 
 - **Driver**: Main gRPC service implementing DRA kubelet plugin interface
-- **State Manager**: Tracks available and allocated SR-IOV virtual functions  
+- **Device State Manager**: Tracks available and allocated SR-IOV virtual functions  
 - **CDI Generator**: Creates Container Device Interface specifications for VFs
+- **NRI Plugin**: Node Resource Interface integration for container runtime interaction
+- **Pod Manager**: Manages pod lifecycle and resource allocation
+- **CNI Runtime**: Integrates with CNI plugins for network configuration
 - **Health Check**: Monitors driver health and readiness
-- **Checkpoint Manager**: Persists allocation state across restarts
 
 ## Development
 
 ### Prerequisites
 
-- Go 1.24.0+
+- Go 1.24.6+
 - Make
 - Container tool (Docker/Podman)
 - Kubernetes cluster with DRA enabled

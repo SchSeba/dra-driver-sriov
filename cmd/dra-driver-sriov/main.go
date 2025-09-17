@@ -8,13 +8,18 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v2"
 
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 
+	"github.com/SchSeba/dra-driver-sriov/pkg/cni"
+	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
+	"github.com/SchSeba/dra-driver-sriov/pkg/devicestate"
 	"github.com/SchSeba/dra-driver-sriov/pkg/driver"
 	"github.com/SchSeba/dra-driver-sriov/pkg/flags"
+	"github.com/SchSeba/dra-driver-sriov/pkg/nri"
+	"github.com/SchSeba/dra-driver-sriov/pkg/podmanager"
 	"github.com/SchSeba/dra-driver-sriov/pkg/types"
 )
 
@@ -89,8 +94,8 @@ func newApp() *cli.App {
 			}
 
 			config := &types.Config{
-				Flags:      flagsOptions,
-				CoreClient: clientSets.Core,
+				Flags:     flagsOptions,
+				K8sClient: clientSets,
 			}
 
 			return RunPlugin(ctx, config)
@@ -126,9 +131,35 @@ func RunPlugin(ctx context.Context, config *types.Config) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	config.CancelMainCtx = cancel
 
-	dvr, err := driver.New(ctx, config)
+	// create device state manager
+	deviceStateManager, err := devicestate.NewDeviceStateManager(config)
 	if err != nil {
 		return err
+	}
+
+	// create pod manager
+	podManager, err := podmanager.NewPodManager(config)
+	if err != nil {
+		return err
+	}
+
+	// start driver
+	dvr, err := driver.Start(ctx, config, deviceStateManager, podManager)
+	if err != nil {
+		return fmt.Errorf("failed to start DRA driver: %w", err)
+	}
+
+	// create cni runtime
+	cniRuntime := cni.New(consts.DriverName, []string{"/opt/cni/bin"})
+
+	// register to NRI
+	nriPlugin, err := nri.NewNRIPlugin(config, podManager, cniRuntime)
+	if err != nil {
+		return fmt.Errorf("failed to create NRI plugin: %w", err)
+	}
+	err = nriPlugin.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start NRI plugin: %w", err)
 	}
 
 	<-ctx.Done()
@@ -140,11 +171,13 @@ func RunPlugin(ctx context.Context, config *types.Config) error {
 		// a signal. Only log the error for more interesting cases.
 		logger.Error(err, "error from context")
 	}
-
+	logger.V(1).Info("Shutting down")
+	nriPlugin.Stop()
 	err = dvr.Shutdown(logger)
 	if err != nil {
 		logger.Error(err, "Unable to cleanly shutdown driver")
 	}
+	logger.V(1).Info("Successful driver shutdown")
 
 	return nil
 }

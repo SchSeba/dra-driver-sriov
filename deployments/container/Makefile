@@ -34,7 +34,6 @@ $(DISTRIBUTIONS):
 	DOCKER_BUILDKIT=1 \
 		$(CONTAINER_TOOL) build --pull \
 		--tag $(IMAGE) \
-		--no-cache \
 		--build-arg GOLANG_VERSION="$(GOLANG_VERSION)" \
 		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
 		--build-arg VERSION="$(VERSION)" \

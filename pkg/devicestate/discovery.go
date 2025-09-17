@@ -1,4 +1,4 @@
-package state
+package devicestate
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
+	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 	"github.com/SchSeba/dra-driver-sriov/pkg/types"
 )
 
@@ -119,19 +120,19 @@ func DiscoverSriovDevices() (types.AllocatableDevices, error) {
 			resourceList[deviceName] = resourceapi.Device{
 				Name: deviceName,
 				Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-					"vendor": {
+					consts.AttributeVendorID: {
 						StringValue: ptr.To(pfInfo.VendorID),
 					},
-					"deviceID": {
+					consts.AttributeDeviceID: {
 						StringValue: ptr.To(pfInfo.DeviceID),
 					},
-					"pciAddress": {
+					consts.AttributePciAddress: {
 						StringValue: ptr.To(vfPciAddress),
 					},
-					"PFName": {
+					consts.AttributePFName: {
 						StringValue: ptr.To(pfInfo.NetName),
 					},
-					"EswitchMode": {
+					consts.AttributeEswitchMode: {
 						StringValue: ptr.To(pfInfo.EswitchMode),
 					},
 				},
