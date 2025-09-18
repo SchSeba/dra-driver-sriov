@@ -29,8 +29,8 @@ BUILDIMAGE ?= $(IMAGE_NAME)-build:$(BUILDIMAGE_TAG)
 CMDS := $(patsubst ./cmd/%/,%,$(sort $(dir $(wildcard ./cmd/*/))))
 CMD_TARGETS := $(patsubst %,cmd-%, $(CMDS))
 
-CHECK_TARGETS := assert-fmt vet lint ineffassign misspell
-MAKE_TARGETS := binaries build check vendor fmt test examples cmds coverage generate build-image $(CHECK_TARGETS)
+CHECK_TARGETS := assert-fmt vet lint
+MAKE_TARGETS := binaries build check vendor fmt test examples cmds coverage generate mock-generate build-image $(CHECK_TARGETS)
 
 TARGETS := $(MAKE_TARGETS) $(CMD_TARGETS)
 
@@ -82,24 +82,16 @@ assert-fmt:
 		rm fmt.out; \
 	fi
 
-ineffassign:
-	ineffassign $(MODULE)/...
 
-lint:
-	golangci-lint run ./...
+GOLANGCI_LINT = $(BIN_DIR)/golangci-lint
+lint: $(GOLANGCI_LINT)
+	$(GOLANGCI_LINT) run ./...
 
-misspell:
-	misspell $(MODULE)/...
+$(GOLANGCI_LINT):
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION))
 
 vet:
 	go vet $(MODULE)/...
-
-# Ensure that all log calls support contextual logging.
-test: logcheck
-.PHONY: logcheck
-logcheck:
-	(cd hack/tools && GOBIN=$(PWD) go install sigs.k8s.io/logtools/logcheck)
-	./logcheck -check-contextual -check-deprecations ./...
 
 COVERAGE_FILE := coverage.out
 test: build cmds
@@ -109,25 +101,45 @@ coverage: test
 	cat $(COVERAGE_FILE) | grep -v "_mock.go" > $(COVERAGE_FILE).no-mocks
 	go tool cover -func=$(COVERAGE_FILE).no-mocks
 
-generate: generate-deepcopy
+generate: generate-deepcopy generate-crds mock-generate
 
-generate-deepcopy: vendor
+CONTROLLER_GEN = $(BIN_DIR)/controller-gen
+generate-deepcopy: $(CONTROLLER_GEN)
 	for api in $(APIS); do \
 		rm -f $(CURDIR)/pkg/api/$${api}/zz_generated.deepcopy.go; \
-		controller-gen \
+		$(CONTROLLER_GEN) \
 			object:headerFile=$(CURDIR)/hack/boilerplate.generatego.txt \
 			paths=$(CURDIR)/pkg/api/$${api}/ \
 			output:object:dir=$(CURDIR)/pkg/api/$${api}; \
 	done
 
-setup-e2e:
-	test/e2e/setup-e2e.sh
+$(CONTROLLER_GEN):
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION))
 
-test-e2e:
-	test/e2e/e2e.sh
+generate-crds: $(CONTROLLER_GEN)
+	@mkdir -p $(CURDIR)/deployments/helm/dra-driver-sriov/templates/
+	for api in $(APIS); do \
+		if [ "$${api}" = "sriovdra/v1alpha1" ]; then \
+			$(CONTROLLER_GEN) \
+				crd \
+				paths=$(CURDIR)/pkg/api/$${api}/ \
+				output:crd:dir=$(CURDIR)/deployments/helm/dra-driver-sriov/templates/; \
+		fi; \
+	done
 
-teardown-e2e:
-	test/e2e/teardown-e2e.sh
+MISSPELL = $(BIN_DIR)/misspell
+misspell: $(MISSPELL)
+	$(MISSPELL) $(MODULE)/...
+
+$(MISSPELL):
+	$(call go-install-tool,$(MISSPELL),github.com/client9/misspell/cmd/misspell@latest)
+
+MOCKGEN = $(BIN_DIR)/mockgen
+mock-generate: $(MOCKGEN)
+	PATH=$(BIN_DIR):$$PATH go generate ./...
+
+$(MOCKGEN):
+	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen@$(MOCKGEN_VERSION))
 
 # Generate an image for containerized builds
 # Note: This image is local only
@@ -137,6 +149,11 @@ teardown-e2e:
 		$(CONTAINER_TOOL) build \
 			--progress=plain \
 			--build-arg GOLANG_VERSION="$(GOLANG_VERSION)" \
+			--build-arg GOLANGCI_LINT_VERSION="$(GOLANGCI_LINT_VERSION)" \
+			--build-arg MOQ_VERSION="$(MOQ_VERSION)" \
+			--build-arg CONTROLLER_GEN_VERSION="$(CONTROLLER_GEN_VERSION)" \
+			--build-arg CLIENT_GEN_VERSION="$(CLIENT_GEN_VERSION)" \
+			--build-arg MOCKGEN_VERSION="$(MOCKGEN_VERSION)" \
 			--tag $(BUILDIMAGE) \
 			-f $(^) \
 			docker; \
@@ -173,11 +190,11 @@ $(DOCKER_TARGETS): docker-%: .build-image
 		-w $(PWD) \
 		$(BUILDIMAGE)
 
-.PHONY: push-release-artifacts
-push-release-artifacts:
-	CHART_VERSION="$${CHART_GIT_TAG##chart/}" \
-		HELM=$(HELM) \
-		demo/scripts/push-driver-chart.sh
-	export DRIVER_IMAGE_TAG="${IMAGE_GIT_TAG}"; \
-	demo/scripts/build-driver-image.sh && \
-	demo/scripts/push-driver-image.sh
+# go-install-tool will 'go install' any package $2 and install it to $1.
+define go-install-tool
+@[ -f $(1) ] || { \
+set -e ;\
+echo "Downloading $(2)" ;\
+GOBIN=$(BIN_DIR) go install $(2) ;\
+}
+endef

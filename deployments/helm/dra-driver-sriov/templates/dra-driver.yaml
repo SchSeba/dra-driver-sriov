@@ -66,12 +66,12 @@ spec:
         image: {{ include "dra-driver-sriov.fullimage" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command:
-          # - dlv
-          # - --listen=:2345
-          # - --headless=true
-          # - --api-version=2
-          # - --accept-multiclient
-          # - exec
+          - dlv
+          - --listen=:2345
+          - --headless=true
+          - --api-version=2
+          - --accept-multiclient
+          - exec
           - /usr/bin/dra-driver-sriov
         resources:
           {{- toYaml .Values.kubeletPlugin.containers.plugin.resources | nindent 10 }}
@@ -99,6 +99,8 @@ spec:
           value: {{ .Values.kubeletPlugin.nriPluginName | quote }}
         - name: NRI_PLUGIN_IDX
           value: {{ .Values.kubeletPlugin.nriPluginIndex | quote }}
+        - name: DEFAULT_INTERFACE_PREFIX
+          value: {{ .Values.kubeletPlugin.defaultInterfacePrefix | quote }}
         - name: NODE_NAME
           valueFrom:
             fieldRef:

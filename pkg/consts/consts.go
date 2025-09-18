@@ -16,13 +16,39 @@
 
 package consts
 
+import (
+	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
+)
+
 const (
-	DriverName                 = "virtualfunction.sriovnetwork.openshift.io"
+	GroupName                  = "sriovnetwork.openshift.io"
+	DriverName                 = "sriovnetwork.openshift.io"
 	DriverPluginCheckpointFile = "checkpoint.json"
 
-	AttributePciAddress  = DriverName + "/pciAddress"
-	AttributePFName      = DriverName + "/PFName"
-	AttributeEswitchMode = DriverName + "/EswitchMode"
-	AttributeVendorID    = DriverName + "/vendor"
-	AttributeDeviceID    = DriverName + "/deviceID"
+	StandardAttributePrefix = "resource.kubernetes.io"
+
+	AttributePciAddress       = DriverName + "/pciAddress"
+	AttributePFName           = DriverName + "/PFName"
+	AttributeEswitchMode      = DriverName + "/EswitchMode"
+	AttributeVendorID         = DriverName + "/vendor"
+	AttributeDeviceID         = DriverName + "/deviceID"
+	AttributePFDeviceID       = DriverName + "/pfDeviceID"
+	AttributeVFID             = DriverName + "/vfID"
+	AttributeResourceName     = DriverName + "/resourceName"
+	AttributeNumaNode         = StandardAttributePrefix + "/numaNode"
+	AttributeParentPciAddress = StandardAttributePrefix + "/pcieRoot"
+
+	// Network device constants
+	NetClass  = 0x02 // Network controller class
+	SysBusPci = "/sys/bus/pci/devices"
 )
+
+var Backoff = wait.Backoff{
+	Duration: 100 * time.Millisecond, // Initial delay
+	Factor:   2.0,                    // Exponential factor
+	Jitter:   0.1,                    // 10% jitter
+	Steps:    5,                      // Maximum 5 attempts
+	Cap:      2 * time.Second,        // Maximum delay between attempts
+}

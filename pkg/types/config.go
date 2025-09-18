@@ -12,10 +12,12 @@ type Flags struct {
 	LoggingConfig    *flags.LoggingConfig
 
 	NodeName                      string
+	Namespace                     string
 	CdiRoot                       string
 	KubeletRegistrarDirectoryPath string
 	KubeletPluginsDirectoryPath   string
 	HealthcheckPort               int
+	DefaultInterfacePrefix        string
 }
 
 type Config struct {

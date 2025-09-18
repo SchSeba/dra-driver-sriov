@@ -207,6 +207,11 @@ systemctl daemon-reload
 systemctl enable --now load-br-netfilter
 
 systemctl restart NetworkManager
+
+grubby --update-kernel=DEFAULT --args=pci=realloc
+grubby --update-kernel=DEFAULT --args=iommu=pt
+grubby --update-kernel=DEFAULT --args=intel_iommu=on
+
 EOF
 }
 

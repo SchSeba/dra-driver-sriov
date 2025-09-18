@@ -5,8 +5,10 @@ import (
 
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 
-	"github.com/SchSeba/dra-driver-sriov/pkg/types"
+	configapi "github.com/SchSeba/dra-driver-sriov/pkg/api/virtualfunction/v1alpha1"
+	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 )
 
 // GetOpaqueDeviceConfigs returns an ordered list of the configs contained in possibleConfigs for this driver.
@@ -20,11 +22,10 @@ import (
 // All of the configs relevant to the driver from the list of possibleConfigs
 // will be returned in order of precedence (from lowest to highest). If no
 // configs are found, nil is returned.
-func getOpaqueDeviceConfigs(
+func getMapOfOpaqueDeviceConfigForDevice(
 	decoder runtime.Decoder,
-	driverName string,
 	possibleConfigs []resourceapi.DeviceAllocationConfiguration,
-) ([]*types.OpaqueDeviceConfig, error) {
+) (map[string]*configapi.VfConfig, error) {
 	// Collect all configs in order of reverse precedence.
 	var classConfigs []resourceapi.DeviceAllocationConfiguration
 	var claimConfigs []resourceapi.DeviceAllocationConfiguration
@@ -44,7 +45,8 @@ func getOpaqueDeviceConfigs(
 	candidateConfigs = append(candidateConfigs, claimConfigs...)
 
 	// Decode all configs that are relevant for the driver.
-	var resultConfigs []*types.OpaqueDeviceConfig
+	resultConfigs := make(map[string]*configapi.VfConfig)
+
 	for _, config := range candidateConfigs {
 		// If this is nil, the driver doesn't support some future API extension
 		// and needs to be updated.
@@ -56,7 +58,7 @@ func getOpaqueDeviceConfigs(
 		// single request can be satisfied by different drivers. This is not
 		// an error -- drivers must skip over other driver's configs in order
 		// to support this.
-		if config.DeviceConfiguration.Opaque.Driver != driverName {
+		if config.DeviceConfiguration.Opaque.Driver != consts.DriverName {
 			continue
 		}
 
@@ -64,39 +66,22 @@ func getOpaqueDeviceConfigs(
 		if err != nil {
 			return nil, fmt.Errorf("error decoding config parameters: %w", err)
 		}
-
-		resultConfig := &types.OpaqueDeviceConfig{
-			Requests: config.Requests,
-			Config:   decodedConfig,
+		vfConfig, ok := decodedConfig.(*configapi.VfConfig)
+		if !ok {
+			return nil, fmt.Errorf("decoded config is not a VfConfig")
 		}
-
-		resultConfigs = append(resultConfigs, resultConfig)
+		for _, request := range config.Requests {
+			resultConfig, found := resultConfigs[request]
+			if !found {
+				resultConfig = configapi.DefaultVfConfig()
+			}
+			resultConfig.Override(vfConfig)
+			resultConfigs[request] = resultConfig
+		}
 	}
-
+	klog.V(3).Info("Result configs", "resultConfigs", resultConfigs)
+	if len(resultConfigs) == 0 {
+		return resultConfigs, fmt.Errorf("no configs constructed for driver")
+	}
 	return resultConfigs, nil
 }
-
-// func buildAllocatedDeviceStatus(deviceRequestAllocationResult *resourcev1.DeviceRequestAllocationResult, result cnitypes.Result) (*resourcev1.AllocatedDeviceStatus, error) {
-// 	resultBytes, err := json.Marshal(result)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to json.Marshal result (%v): %v", result, err)
-// 	}
-
-// 	cniResult, err := cni100.NewResultFromResult(result)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to NewResultFromResult result (%v): %v", result, err)
-// 	}
-
-// 	data := runtime.RawExtension{
-// 		Raw: resultBytes,
-// 	}
-
-// 	return &resourcev1.AllocatedDeviceStatus{
-// 		Driver:      deviceRequestAllocationResult.Driver,
-// 		Pool:        deviceRequestAllocationResult.Pool,
-// 		Device:      deviceRequestAllocationResult.Device,
-// 		ShareID:     (*string)(deviceRequestAllocationResult.ShareID),
-// 		Data:        &data,
-// 		NetworkData: cniResultToNetworkData(cniResult),
-// 	}, nil
-// }

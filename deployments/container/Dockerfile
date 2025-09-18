@@ -14,7 +14,9 @@
 
 ARG GOLANG_VERSION=undefined
 ARG BASE_IMAGE=undefined
-FROM golang:${GOLANG_VERSION} as build
+
+# Build stage using native architecture to avoid emulation issues during Go compilation
+FROM --platform=$BUILDPLATFORM golang:${GOLANG_VERSION} AS build
 
 ARG GOARCH=amd64
 
@@ -24,7 +26,8 @@ COPY . .
 RUN mkdir /artifacts
 RUN GOARCH=${GOARCH} make PREFIX=/artifacts cmds
 
-FROM ${BASE_IMAGE}
+# Final stage using target architecture
+FROM --platform=linux/amd64 ${BASE_IMAGE}
 
 LABEL io.k8s.display-name="Dynamic Resource Allocation (DRA) resource driver for SR-IOV devices"
 LABEL name="Dynamic Resource Allocation (DRA) resource driver for SR-IOV devices"
