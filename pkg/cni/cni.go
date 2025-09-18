@@ -122,7 +122,7 @@ func (rntm *Runtime) DetachNetwork(
 		return fmt.Errorf("failed to GetCNIConfigFromSpec: %v", err)
 	}
 
-	confList, err := libcni.ConfFromBytes([]byte(rawNetConf))
+	confList, err := libcni.ConfFromBytes(rawNetConf)
 	if err != nil {
 		return fmt.Errorf("failed to ConfListFromBytes: %v", err)
 	}

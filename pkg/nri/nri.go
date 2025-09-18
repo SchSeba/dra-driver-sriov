@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/SchSeba/dra-driver-sriov/pkg/cni"
+	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 	"github.com/SchSeba/dra-driver-sriov/pkg/podmanager"
 	"github.com/SchSeba/dra-driver-sriov/pkg/types"
 	"github.com/containerd/nri/pkg/api"
@@ -29,7 +30,17 @@ func NewNRIPlugin(config *types.Config, podManager *podmanager.PodManager, cniRu
 		cniRuntime: cniRuntime,
 	}
 	var err error
-	p.stub, err = stub.New(p)
+	// register the NRI plugin
+	nriOpts := []stub.Option{
+		// https://github.com/containerd/nri/pull/173
+		// Otherwise it silently exits the program
+		stub.WithOnClose(func() {
+			klog.Infof("%s NRI plugin closed canceling context", consts.DriverName)
+			config.CancelMainCtx(fmt.Errorf("NRI plugin closed"))
+		}),
+	}
+
+	p.stub, err = stub.New(p, nriOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin stub: %w", err)
 	}

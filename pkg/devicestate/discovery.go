@@ -22,12 +22,14 @@ func init() {
 }
 
 type PFInfo struct {
-	PciAddress  string
-	NetName     string
-	VendorID    string
-	DeviceID    string
-	Address     string
-	EswitchMode string
+	PciAddress       string
+	NetName          string
+	VendorID         string
+	DeviceID         string
+	Address          string
+	EswitchMode      string
+	NumaNode         string
+	ParentPciAddress string
 }
 
 func DiscoverSriovDevices() (types.AllocatableDevices, error) {
@@ -78,20 +80,39 @@ func DiscoverSriovDevices() (types.AllocatableDevices, error) {
 		}
 
 		eswitchMode := helpers.GetNicSriovMode(device.Address)
+
+		// Get NUMA node information
+		numaNode, err := helpers.GetNumaNode(device.Address)
+		if err != nil {
+			logger.Error(err, "Failed to get NUMA node, using default", "address", device.Address)
+			numaNode = "0" // Default to node 0 if we can't determine it
+		}
+
+		// Get parent PCI address information
+		parentPciAddress, err := helpers.GetParentPciAddress(device.Address)
+		if err != nil {
+			logger.Error(err, "Failed to get parent PCI address", "address", device.Address)
+			parentPciAddress = "" // Leave empty if we can't determine it
+		}
+
 		logger.Info("Found SR-IOV PF device",
 			"address", device.Address,
 			"interface", pfNetName,
 			"vendor", device.Vendor.ID,
 			"device", device.Product.ID,
-			"eswitchMode", eswitchMode)
+			"eswitchMode", eswitchMode,
+			"numaNode", numaNode,
+			"parentPciAddress", parentPciAddress)
 
 		pfList = append(pfList, PFInfo{
-			PciAddress:  device.Address,
-			NetName:     pfNetName,
-			VendorID:    device.Vendor.ID,
-			DeviceID:    device.Product.ID,
-			Address:     device.Address,
-			EswitchMode: eswitchMode,
+			PciAddress:       device.Address,
+			NetName:          pfNetName,
+			VendorID:         device.Vendor.ID,
+			DeviceID:         device.Product.ID,
+			Address:          device.Address,
+			EswitchMode:      eswitchMode,
+			NumaNode:         numaNode,
+			ParentPciAddress: parentPciAddress,
 		})
 	}
 
@@ -134,6 +155,19 @@ func DiscoverSriovDevices() (types.AllocatableDevices, error) {
 					},
 					consts.AttributeEswitchMode: {
 						StringValue: ptr.To(pfInfo.EswitchMode),
+					},
+					consts.AttributeNumaNode: {
+						IntValue: func() *int64 {
+							numaNodeInt, err := strconv.ParseInt(pfInfo.NumaNode, 10, 64)
+							if err != nil {
+								// Default to -1 if parsing fails
+								return ptr.To(int64(-1))
+							}
+							return ptr.To(numaNodeInt)
+						}(),
+					},
+					consts.AttributeParentPciAddress: {
+						StringValue: ptr.To(pfInfo.ParentPciAddress),
 					},
 				},
 			}

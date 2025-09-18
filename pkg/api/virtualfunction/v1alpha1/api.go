@@ -17,16 +17,16 @@
 package v1alpha1
 
 import (
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
+
+	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 )
 
 const (
-	GroupName = "sriovnetwork.openshift.io"
+	GroupName = consts.GroupName
 	Version   = "v1alpha1"
 
 	VfConfigKind = "VfConfig"
@@ -59,15 +59,24 @@ func DefaultVfConfig() *VfConfig {
 	}
 }
 
-// Normalize updates a VfConfig config with implied default values.
-func (c *VfConfig) Normalize() error {
-	if c == nil {
-		return fmt.Errorf("config is 'nil'")
+// Override overrides a VfConfig config with another VfConfig config.
+func (c *VfConfig) Override(other *VfConfig) {
+	if other.Driver != "" {
+		c.Driver = other.Driver
 	}
+	if other.IfName != "" {
+		c.IfName = other.IfName
+	}
+	if other.NetAttachDefName != "" {
+		c.NetAttachDefName = other.NetAttachDefName
+	}
+}
+
+// Normalize updates a VfConfig config with implied default values.
+func (c *VfConfig) Normalize() {
 	if c.Driver == "" {
 		c.Driver = "default"
 	}
-	return nil
 }
 
 func init() {

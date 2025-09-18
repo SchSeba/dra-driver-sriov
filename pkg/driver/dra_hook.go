@@ -19,14 +19,17 @@ func (d *Driver) PrepareResourceClaims(ctx context.Context, claims []*resourceap
 		return result, nil
 	}
 	logger := klog.FromContext(ctx).WithName("PrepareResourceClaims")
-	logger.V(1).Info("number of claims", "len", len(claims))
 	logger.V(3).Info("claims", "claims", claims)
 
-	// lets prepare the claims
+	// let's prepare the claims
 	for _, claim := range claims {
-		logger.V(3).Info("Preparing claim", "claim", claim.UID)
+		logger.V(1).Info("Preparing claim", "claim", claim.UID)
+		logger.V(3).Info("Claim", "claim", claim)
 		result[claim.UID] = d.prepareResourceClaim(ctx, claim)
 		logger.V(3).Info("Prepared claim", "claim", claim.UID, "result", result[claim.UID])
+		if result[claim.UID].Err != nil {
+			logger.Error(result[claim.UID].Err, "failed to prepare resource claim", "claim", claim)
+		}
 	}
 
 	logger.V(3).Info("Prepared claims", "result", result)
@@ -49,10 +52,15 @@ func (d *Driver) prepareResourceClaim(ctx context.Context, claim *resourceapi.Re
 		}
 	}
 
+	if claim.Status.Allocation == nil {
+		logger.Error(fmt.Errorf("claim not yet allocated"), "Prepare failed", "claim", claim.UID)
+		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim not yet allocated")}
+	}
+
 	// get the pod UID
 	podUID := claim.Status.ReservedFor[0].UID
 
-	// check if the pod claim already is prepared
+	// check if the pod claim is already prepared and return the prepared devices
 	preparedDevices, isAlreadyPrepared := d.podManager.Get(podUID, claim.UID)
 	if isAlreadyPrepared {
 		var prepared []kubeletplugin.Device
@@ -68,7 +76,7 @@ func (d *Driver) prepareResourceClaim(ctx context.Context, claim *resourceapi.Re
 	}
 
 	// if the pod claim is not prepared, prepare the devices for the claim
-	preparedDevices, err := d.deviceStateManager.PrepareDevices(ctx, claim)
+	preparedDevices, err := d.deviceStateManager.PrepareDevicesForClaim(ctx, claim)
 	if err != nil {
 		logger.Error(err, "Error preparing devices for claim", "claim", claim.UID)
 		return kubeletplugin.PrepareResult{

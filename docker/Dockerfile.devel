@@ -21,3 +21,4 @@ RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.0
 RUN go install github.com/matryer/moq@v0.4.0
 RUN go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0
 RUN go install k8s.io/code-generator/cmd/client-gen@v0.29.2
+RUN go install go.uber.org/mock/mockgen@v0.5.0

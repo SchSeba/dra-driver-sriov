@@ -17,12 +17,17 @@
 package consts
 
 const (
-	DriverName                 = "virtualfunction.sriovnetwork.openshift.io"
+	GroupName                  = "sriovnetwork.openshift.io"
+	DriverName                 = "sriovnetwork.openshift.io"
 	DriverPluginCheckpointFile = "checkpoint.json"
 
-	AttributePciAddress  = DriverName + "/pciAddress"
-	AttributePFName      = DriverName + "/PFName"
-	AttributeEswitchMode = DriverName + "/EswitchMode"
-	AttributeVendorID    = DriverName + "/vendor"
-	AttributeDeviceID    = DriverName + "/deviceID"
+	StandardAttributePrefix = "resource.kubernetes.io"
+
+	AttributePciAddress       = DriverName + "/pciAddress"
+	AttributePFName           = DriverName + "/PFName"
+	AttributeEswitchMode      = DriverName + "/EswitchMode"
+	AttributeVendorID         = DriverName + "/vendor"
+	AttributeDeviceID         = DriverName + "/deviceID"
+	AttributeNumaNode         = StandardAttributePrefix + "/numaNode"
+	AttributeParentPciAddress = StandardAttributePrefix + "/pcieRoot"
 )

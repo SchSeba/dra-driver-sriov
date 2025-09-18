@@ -31,6 +31,10 @@ type HelpersInterface interface {
 	// Network interface functions
 	TryGetInterfaceName(pciAddr string) string
 	GetNicSriovMode(pciAddr string) string
+
+	// NUMA and parent device functions
+	GetNumaNode(pciAddress string) (string, error)
+	GetParentPciAddress(pciAddress string) (string, error)
 }
 
 // Helpers provides unified helper functionality for SR-IOV and PCI operations
@@ -202,4 +206,67 @@ func (h *Helpers) GetNicSriovMode(pciAddr string) string {
 	// For simplicity, always return legacy mode
 	// A full implementation would use netlink to query the eswitch mode
 	return "legacy"
+}
+
+// GetNumaNode returns the NUMA node for a given PCI device
+func (h *Helpers) GetNumaNode(pciAddress string) (string, error) {
+	numaNodePath := fmt.Sprintf("/sys/bus/pci/devices/%s/numa_node", pciAddress)
+	content, err := os.ReadFile(numaNodePath)
+	if err != nil {
+		// If numa_node file doesn't exist, return "0" as default
+		if os.IsNotExist(err) {
+			return "0", nil
+		}
+		return "", fmt.Errorf("failed to read numa_node for %s: %v", pciAddress, err)
+	}
+
+	numaNode := strings.TrimSpace(string(content))
+	// If numa_node contains -1, it means NUMA is not available, default to "0"
+	if numaNode == "-1" {
+		return "0", nil
+	}
+
+	return numaNode, nil
+}
+
+// GetParentPciAddress returns the parent PCI device address
+func (h *Helpers) GetParentPciAddress(pciAddress string) (string, error) {
+	// Parse the PCI address to get bus information
+	// PCI address format: DDDD:BB:DD.F (domain:bus:device.function)
+	parts := strings.Split(pciAddress, ":")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("invalid PCI address format: %s", pciAddress)
+	}
+
+	domain := parts[0]
+	deviceFunc := parts[2]
+
+	// For most cases, we can try to find the parent by checking if there's a bridge
+	// at bus 00 or look for the immediate parent in the PCI hierarchy
+
+	// First, try to get parent from sysfs
+	parentPath := fmt.Sprintf("/sys/bus/pci/devices/%s/../", pciAddress)
+	parentDir, err := filepath.EvalSymlinks(parentPath)
+	if err == nil {
+		parentAddr := filepath.Base(parentDir)
+		// Validate the parent address format
+		if len(strings.Split(parentAddr, ":")) == 3 {
+			return parentAddr, nil
+		}
+	}
+
+	// Fallback: construct potential parent addresses
+	// Try the root bus first (usually the PCIe root complex)
+	deviceParts := strings.Split(deviceFunc, ".")
+	if len(deviceParts) == 2 {
+		// Try to find a bridge on bus 00
+		parentAddr := fmt.Sprintf("%s:00:00.0", domain)
+		parentDevPath := fmt.Sprintf("/sys/bus/pci/devices/%s", parentAddr)
+		if _, err := os.Stat(parentDevPath); err == nil {
+			return parentAddr, nil
+		}
+	}
+
+	// If we can't find a specific parent, return empty string
+	return "", nil
 }

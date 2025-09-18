@@ -1,19 +1,37 @@
 ---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: vf-test2
+spec:
+  selectors:
+    - cel:
+        expression: "device.driver == 'sriovnetwork.openshift.io'"
+  config:
+    - opaque:
+        driver: sriovnetwork.openshift.io
+        parameters:
+          apiVersion: sriovnetwork.openshift.io/v1alpha1
+          kind: VfConfig
+          ifName: net1
+          netAttachDefName: vf-test
+          driver: "vfio-pci"
+---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: vf-test1
+  name: vf-test2
 ---
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
-  name: vf-test1
-  namespace: vf-test1
+  name: vf-test
+  namespace: vf-test2
 spec:
   config: |-
     {
         "cniVersion": "1.0.0",
-        "name": "vf-test1",
+        "name": "vf-test2",
         "type": "sriov",
         "vlan": 0,
         "spoofchk": "on",
@@ -35,7 +53,7 @@ spec:
 apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
-  namespace: vf-test1
+  namespace: vf-test2
   name: single-vf
 spec:
   spec:
@@ -43,7 +61,7 @@ spec:
       requests:
       - name: vf
         exactly:
-          deviceClassName: sriovnetwork.openshift.io
+          deviceClassName: vf-test2
       config:
       - requests: ["vf"]
         opaque:
@@ -52,18 +70,17 @@ spec:
             apiVersion: sriovnetwork.openshift.io/v1alpha1
             kind: VfConfig
             ifName: net1
-            netAttachDefName: vf-test1
+            netAttachDefName: vf-test
 
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  namespace: vf-test1
+  namespace: vf-test2
   name: pod0
   labels:
     app: pod
 spec:
-  terminationGracePeriodSeconds: 2
   containers:
   - name: ctr0
     image: quay.io/schseba/toolbox:latest
@@ -73,11 +90,9 @@ spec:
       - sleep INF
     securityContext:
       runAsUser: 0
-      allowPrivilegeEscalation: true
       capabilities:
         add:
           - NET_ADMIN
-          - NET_RAW
     resources:
       claims:
       - name: vf

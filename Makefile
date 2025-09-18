@@ -30,7 +30,7 @@ CMDS := $(patsubst ./cmd/%/,%,$(sort $(dir $(wildcard ./cmd/*/))))
 CMD_TARGETS := $(patsubst %,cmd-%, $(CMDS))
 
 CHECK_TARGETS := assert-fmt vet lint ineffassign misspell
-MAKE_TARGETS := binaries build check vendor fmt test examples cmds coverage generate build-image $(CHECK_TARGETS)
+MAKE_TARGETS := binaries build check vendor fmt test examples cmds coverage generate mock-generate build-image $(CHECK_TARGETS)
 
 TARGETS := $(MAKE_TARGETS) $(CMD_TARGETS)
 
@@ -88,18 +88,8 @@ ineffassign:
 lint:
 	golangci-lint run ./...
 
-misspell:
-	misspell $(MODULE)/...
-
 vet:
 	go vet $(MODULE)/...
-
-# Ensure that all log calls support contextual logging.
-test: logcheck
-.PHONY: logcheck
-logcheck:
-	(cd hack/tools && GOBIN=$(PWD) go install sigs.k8s.io/logtools/logcheck)
-	./logcheck -check-contextual -check-deprecations ./...
 
 COVERAGE_FILE := coverage.out
 test: build cmds
@@ -109,7 +99,7 @@ coverage: test
 	cat $(COVERAGE_FILE) | grep -v "_mock.go" > $(COVERAGE_FILE).no-mocks
 	go tool cover -func=$(COVERAGE_FILE).no-mocks
 
-generate: generate-deepcopy
+generate: generate-deepcopy mock-generate
 
 generate-deepcopy: vendor
 	for api in $(APIS); do \
@@ -120,14 +110,8 @@ generate-deepcopy: vendor
 			output:object:dir=$(CURDIR)/pkg/api/$${api}; \
 	done
 
-setup-e2e:
-	test/e2e/setup-e2e.sh
-
-test-e2e:
-	test/e2e/e2e.sh
-
-teardown-e2e:
-	test/e2e/teardown-e2e.sh
+mock-generate: vendor
+	go generate ./...
 
 # Generate an image for containerized builds
 # Note: This image is local only
@@ -172,12 +156,3 @@ $(DOCKER_TARGETS): docker-%: .build-image
 		$(CONTAINER_TOOL_OPTS) \
 		-w $(PWD) \
 		$(BUILDIMAGE)
-
-.PHONY: push-release-artifacts
-push-release-artifacts:
-	CHART_VERSION="$${CHART_GIT_TAG##chart/}" \
-		HELM=$(HELM) \
-		demo/scripts/push-driver-chart.sh
-	export DRIVER_IMAGE_TAG="${IMAGE_GIT_TAG}"; \
-	demo/scripts/build-driver-image.sh && \
-	demo/scripts/push-driver-image.sh

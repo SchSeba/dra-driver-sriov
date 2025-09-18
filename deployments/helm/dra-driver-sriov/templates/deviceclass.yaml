@@ -2,8 +2,8 @@
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass
 metadata:
-  name: virtualfunction.sriovnetwork.openshift.io
+  name: sriovnetwork.openshift.io
 spec:
   selectors:
   - cel: 
-      expression: "device.driver == 'virtualfunction.sriovnetwork.openshift.io'"
+      expression: "device.driver == 'sriovnetwork.openshift.io'"

@@ -93,7 +93,7 @@ spec:
       requests:
       - name: vf
         exactly:
-          deviceClassName: virtualfunction.sriovnetwork.openshift.io
+          deviceClassName: sriovnetwork.openshift.io
 ```
 
 Then reference the claim in your Pod:
