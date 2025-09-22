@@ -29,15 +29,18 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	sriovdrav1alpha1 "github.com/SchSeba/dra-driver-sriov/pkg/api/sriovdra/v1alpha1"
 )
 
 var (
-	scheme = runtime.NewScheme()
+	Scheme = runtime.NewScheme()
 )
 
 func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(netattdefv1.AddToScheme(scheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(Scheme))
+	utilruntime.Must(netattdefv1.AddToScheme(Scheme))
+	utilruntime.Must(sriovdrav1alpha1.AddToScheme(Scheme))
 }
 
 type KubeClientConfig struct {
@@ -114,7 +117,7 @@ func (k *KubeClientConfig) NewClientSets() (ClientSets, error) {
 		return ClientSets{}, fmt.Errorf("create core client: %v", err)
 	}
 
-	ctrlruntimecli, err := client.New(csconfig, client.Options{Scheme: scheme})
+	ctrlruntimecli, err := client.New(csconfig, client.Options{Scheme: Scheme})
 	if err != nil {
 		return ClientSets{}, fmt.Errorf("create controller-runtime client: %v", err)
 	}

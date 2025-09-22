@@ -25,6 +25,7 @@ import (
 	"os"
 
 	"github.com/SchSeba/dra-driver-sriov/pkg/types"
+	"github.com/containerd/nri/pkg/api"
 	"github.com/containernetworking/cni/libcni"
 	netattdefclientutils "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/utils"
 	resourcev1 "k8s.io/api/resource/v1"
@@ -62,17 +63,17 @@ func New(
 // to update the ResourceClaim's status with allocated device information.
 // If a request fails, an error is returned together with the previous successful device status up to date.
 // If the status of a device is already set, CNI ADD will be skipped and the existing status will be preserved.
-func (rntm *Runtime) AttachNetwork(ctx context.Context, deviceConfig *types.PreparedDevice) (*resourcev1.NetworkDeviceData, error) {
+func (rntm *Runtime) AttachNetwork(ctx context.Context, pod *api.PodSandbox, podNetworkNamespace string, deviceConfig *types.PreparedDevice) (*resourcev1.NetworkDeviceData, error) {
 	rt := &libcni.RuntimeConf{
-		ContainerID: deviceConfig.PodSandboxID,
-		NetNS:       deviceConfig.PodNetworkNamespace,
+		ContainerID: pod.Id,
+		NetNS:       podNetworkNamespace,
 		IfName:      deviceConfig.IfName,
 		Args: [][2]string{
 			{"IgnoreUnknown", "true"},
-			{"K8S_POD_NAMESPACE", deviceConfig.PodNamespace},
-			{"K8S_POD_NAME", deviceConfig.PodName},
-			{"K8S_POD_INFRA_CONTAINER_ID", deviceConfig.PodSandboxID},
-			{"K8S_POD_UID", string(deviceConfig.PodUID)},
+			{"K8S_POD_NAMESPACE", pod.Namespace},
+			{"K8S_POD_NAME", pod.Name},
+			{"K8S_POD_INFRA_CONTAINER_ID", pod.Id},
+			{"K8S_POD_UID", pod.Uid},
 		},
 	}
 	rawNetConf, err := netattdefclientutils.GetCNIConfigFromSpec(deviceConfig.NetAttachDefConfig, rntm.DriverName)
@@ -102,19 +103,21 @@ func (rntm *Runtime) AttachNetwork(ctx context.Context, deviceConfig *types.Prep
 // It is typically called during pod teardown to clean up network resources.
 func (rntm *Runtime) DetachNetwork(
 	ctx context.Context,
+	pod *api.PodSandbox,
+	podNetworkNamespace string,
 	deviceConfig *types.PreparedDevice,
 ) error {
 	klog.FromContext(ctx).Info("Runtime.DetachNetwork", "deviceConfig", deviceConfig)
 	rt := &libcni.RuntimeConf{
-		ContainerID: deviceConfig.PodSandboxID,
-		NetNS:       deviceConfig.PodNetworkNamespace,
+		ContainerID: pod.Id,
+		NetNS:       podNetworkNamespace,
 		IfName:      deviceConfig.IfName,
 		Args: [][2]string{
 			{"IgnoreUnknown", "true"},
-			{"K8S_POD_NAMESPACE", deviceConfig.PodNamespace},
-			{"K8S_POD_NAME", deviceConfig.PodName},
-			{"K8S_POD_INFRA_CONTAINER_ID", deviceConfig.PodSandboxID},
-			{"K8S_POD_UID", string(deviceConfig.PodUID)},
+			{"K8S_POD_NAMESPACE", pod.Namespace},
+			{"K8S_POD_NAME", pod.Name},
+			{"K8S_POD_INFRA_CONTAINER_ID", pod.Id},
+			{"K8S_POD_UID", pod.Uid},
 		},
 	}
 	rawNetConf, err := netattdefclientutils.GetCNIConfigFromSpec(deviceConfig.NetAttachDefConfig, rntm.DriverName)
@@ -122,7 +125,7 @@ func (rntm *Runtime) DetachNetwork(
 		return fmt.Errorf("failed to GetCNIConfigFromSpec: %v", err)
 	}
 
-	confList, err := libcni.ConfFromBytes([]byte(rawNetConf))
+	confList, err := libcni.ConfFromBytes(rawNetConf)
 	if err != nil {
 		return fmt.Errorf("failed to ConfListFromBytes: %v", err)
 	}

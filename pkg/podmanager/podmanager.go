@@ -139,10 +139,13 @@ func (s *PodManager) DeleteClaim(claim kubeletplugin.NamespacedObject) error {
 		}
 	}
 
-	for _, uid := range podsToDelete {
-		delete(s.preparedClaimsByPodUID, uid)
+	if len(podsToDelete) > 0 {
+		for _, uid := range podsToDelete {
+			delete(s.preparedClaimsByPodUID, uid)
+		}
+		return s.syncToCheckpoint()
 	}
-	return s.syncToCheckpoint()
+	return nil
 }
 
 func (s *PodManager) syncToCheckpoint() error {

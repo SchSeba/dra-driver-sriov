@@ -15,7 +15,7 @@ import (
 
 const (
 	cdiVendor = consts.DriverName
-	cdiClass  = "nic"
+	cdiClass  = "vf"
 	cdiKind   = cdiVendor + "/" + cdiClass
 
 	cdiCommonDeviceName = "dra-driver-sriov"
@@ -39,6 +39,7 @@ func NewCDIHandler(cdiRootPath string) (*CDIHandler, error) {
 	return handler, nil
 }
 
+// NOT used right now
 func (cdi *CDIHandler) CreateCommonSpecFile() error {
 	spec := &cdispec.Spec{
 		Kind: cdiKind,
@@ -69,40 +70,23 @@ func (cdi *CDIHandler) CreateCommonSpecFile() error {
 	return cdi.cache.WriteSpec(spec, specName)
 }
 
-func (cdi *CDIHandler) CreateClaimSpecFile(devices types.PreparedDevices) error {
-	claimUID := ""
-	specName := ""
-	for _, device := range devices {
-		if claimUID == "" {
-			claimUID = string(device.ClaimNamespacedName.UID)
-			specName = cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
-		}
-	}
+func (cdi *CDIHandler) CreateClaimSpecFile(preparedDevices types.PreparedDevices) error {
+	claimUID := string(preparedDevices[0].ClaimNamespacedName.UID)
+	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
 
 	spec := &cdispec.Spec{
 		Kind:    cdiKind,
 		Devices: []cdispec.Device{},
 	}
 
-	for _, device := range devices {
-		claimEdits := cdiapi.ContainerEdits{
-			ContainerEdits: &cdispec.ContainerEdits{
-				Env: []string{
-					fmt.Sprintf("SRIOV_DEVICE_%s_RESOURCE_CLAIM=%s", strings.ReplaceAll(device.Device.DeviceName, "-", "_"), claimUID),
-				},
-			},
-		}
-
-		claimEdits.Append(device.ContainerEdits)
-
+	for _, device := range preparedDevices {
 		cdiDevice := cdispec.Device{
 			Name:           fmt.Sprintf("%s-%s", claimUID, device.Device.DeviceName),
-			ContainerEdits: *claimEdits.ContainerEdits,
+			ContainerEdits: *device.ContainerEdits.ContainerEdits,
 		}
 
 		spec.Devices = append(spec.Devices, cdiDevice)
 	}
-
 	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
 	if err != nil {
 		return fmt.Errorf("failed to get minimum required CDI spec version: %v", err)
@@ -112,20 +96,41 @@ func (cdi *CDIHandler) CreateClaimSpecFile(devices types.PreparedDevices) error 
 	return cdi.cache.WriteSpec(spec, specName)
 }
 
-func (cdi *CDIHandler) DeleteClaimSpecFile(claimUID string) error {
-	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
+func (cdi *CDIHandler) CreateGlobalPodSpecFile(podUID string, pciAddresses []string) error {
+	envs := []string{fmt.Sprintf("SRIOVNETWORK_PCI_ADDRESSES=%s", strings.Join(pciAddresses, ","))}
+	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, podUID)
+
+	cdiDevice := cdispec.Device{
+		Name: podUID,
+		ContainerEdits: cdispec.ContainerEdits{
+			Env: envs,
+		},
+	}
+
+	spec := &cdispec.Spec{
+		Kind:    cdiKind,
+		Devices: []cdispec.Device{cdiDevice},
+	}
+
+	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
+	if err != nil {
+		return fmt.Errorf("failed to get minimum required CDI spec version: %v", err)
+	}
+	spec.Version = minVersion
+
+	return cdi.cache.WriteSpec(spec, specName)
+
+}
+
+func (cdi *CDIHandler) DeleteSpecFile(uid string) error {
+	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, uid)
 	return cdi.cache.RemoveSpec(specName)
 }
 
-func (cdi *CDIHandler) GetClaimDevices(claimUID string, devices []string) []string {
-	cdiDevices := []string{
-		cdiparser.QualifiedName(cdiVendor, cdiClass, cdiCommonDeviceName),
-	}
+func (cdi *CDIHandler) GetClaimDevices(claimUID string, device string) string {
+	return cdiparser.QualifiedName(cdiVendor, cdiClass, fmt.Sprintf("%s-%s", claimUID, device))
+}
 
-	for _, device := range devices {
-		cdiDevice := cdiparser.QualifiedName(cdiVendor, cdiClass, fmt.Sprintf("%s-%s", claimUID, device))
-		cdiDevices = append(cdiDevices, cdiDevice)
-	}
-
-	return cdiDevices
+func (cdi *CDIHandler) GetPodSpecName(podUID string) string {
+	return cdiparser.QualifiedName(cdiVendor, cdiClass, podUID)
 }

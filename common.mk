@@ -14,16 +14,27 @@
 
 GOLANG_VERSION ?= 1.24.6
 
+# Tool versions for development container
+GOLANGCI_LINT_VERSION ?= v1.52.0
+MOQ_VERSION ?= v0.4.0
+CONTROLLER_GEN_VERSION ?= v0.14.0
+CLIENT_GEN_VERSION ?= v0.29.2
+MOCKGEN_VERSION ?= v0.6.0
+
 DRIVER_NAME := dra-driver-sriov
 MODULE := github.com/SchSeba/$(DRIVER_NAME)
 
-VERSION ?= v0.0.1
+VERSION ?= v0.0.0
 
 VENDOR := sriovnetwork.openshift.io
-APIS := virtualfunction/v1alpha1
+APIS := virtualfunction/v1alpha1 sriovdra/v1alpha1
 
 PLURAL_EXCEPTIONS  = DeviceClassParameters:DeviceClassParameters
-PLURAL_EXCEPTIONS += VirtualfunctionClaimParameters:VirtualfunctionClaimParameters
+PLURAL_EXCEPTIONS += ResourceSelector:ResourceSelectors
+
+CURPATH=$(PWD)
+BIN_DIR=$(CURPATH)/bin
+
 
 ifeq ($(IMAGE_NAME),)
 REGISTRY ?= local

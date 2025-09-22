@@ -8,19 +8,26 @@ import (
 	"os/signal"
 	"syscall"
 
-	cli "github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/SchSeba/dra-driver-sriov/pkg/cdi"
 	"github.com/SchSeba/dra-driver-sriov/pkg/cni"
 	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
+	"github.com/SchSeba/dra-driver-sriov/pkg/controller"
 	"github.com/SchSeba/dra-driver-sriov/pkg/devicestate"
 	"github.com/SchSeba/dra-driver-sriov/pkg/driver"
 	"github.com/SchSeba/dra-driver-sriov/pkg/flags"
 	"github.com/SchSeba/dra-driver-sriov/pkg/nri"
 	"github.com/SchSeba/dra-driver-sriov/pkg/podmanager"
 	"github.com/SchSeba/dra-driver-sriov/pkg/types"
+
+	sriovdrav1alpha1 "github.com/SchSeba/dra-driver-sriov/pkg/api/sriovdra/v1alpha1"
 )
 
 func main() {
@@ -70,6 +77,20 @@ func newApp() *cli.App {
 			Destination: &flagsOptions.HealthcheckPort,
 			EnvVars:     []string{"HEALTHCHECK_PORT"},
 		},
+		&cli.StringFlag{
+			Name:        "default-interface-prefix",
+			Usage:       "Default interface prefix to be used for the virtual functions.",
+			Value:       "vfnet",
+			Destination: &flagsOptions.DefaultInterfacePrefix,
+			EnvVars:     []string{"DEFAULT_INTERFACE_PREFIX"},
+		},
+		&cli.StringFlag{
+			Name:        "namespace",
+			Usage:       "Namespace where the driver should watch for SriovResourceFilter resources.",
+			Value:       "dra-sriov-driver",
+			Destination: &flagsOptions.Namespace,
+			EnvVars:     []string{"NAMESPACE"},
+		},
 	}
 	cliFlags = append(cliFlags, flagsOptions.KubeClientConfig.Flags()...)
 	cliFlags = append(cliFlags, flagsOptions.LoggingConfig.Flags()...)
@@ -106,7 +127,9 @@ func newApp() *cli.App {
 }
 
 func RunPlugin(ctx context.Context, config *types.Config) error {
+	// set the loggers
 	logger := klog.FromContext(ctx)
+	ctrl.SetLogger(logger)
 
 	err := os.MkdirAll(config.DriverPluginPath(), 0750)
 	if err != nil {
@@ -131,8 +154,13 @@ func RunPlugin(ctx context.Context, config *types.Config) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	config.CancelMainCtx = cancel
 
+	cdi, err := cdi.NewCDIHandler(config.Flags.CdiRoot)
+	if err != nil {
+		return fmt.Errorf("unable to create CDI handler: %v", err)
+	}
+
 	// create device state manager
-	deviceStateManager, err := devicestate.NewDeviceStateManager(config)
+	deviceStateManager, err := devicestate.NewDeviceStateManager(config, cdi)
 	if err != nil {
 		return err
 	}
@@ -143,11 +171,67 @@ func RunPlugin(ctx context.Context, config *types.Config) error {
 		return err
 	}
 
+	// create controller manager
+	restConfig, err := config.Flags.KubeClientConfig.NewClientSetConfig()
+	if err != nil {
+		return fmt.Errorf("failed to create REST config: %w", err)
+	}
+
+	logger.Info("Configuring controller manager", "namespace", config.Flags.Namespace)
+
+	// Configure cache to only watch resources in the specified namespace for SriovResourceFilter
+	// while allowing cluster-wide access for other resources like Nodes
+	cacheOpts := cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&sriovdrav1alpha1.SriovResourceFilter{}: {
+				Namespaces: map[string]cache.Config{
+					config.Flags.Namespace: {},
+				},
+			},
+		},
+	}
+
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
+		Scheme: flags.Scheme,
+		Logger: logger,
+		Cache:  cacheOpts,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create controller manager: %w", err)
+	}
+
+	// create and setup resource filter controller
+	resourceFilterController := controller.NewSriovResourceFilterReconciler(config.K8sClient.Client, config.Flags.NodeName, config.Flags.Namespace, deviceStateManager)
+	if err := resourceFilterController.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("failed to setup resource filter controller: %w", err)
+	}
+
+	// start controller manager
+	go func() {
+		logger.Info("Starting controller manager")
+		if err := mgr.Start(ctx); err != nil {
+			logger.Error(err, "Failed to start controller manager")
+			cancel(fmt.Errorf("controller manager failed: %w", err))
+		}
+	}()
+
+	logger.Info("Waiting for cache to sync")
+	synced := mgr.GetCache().WaitForCacheSync(ctx)
+	if !synced {
+		logger.Error(fmt.Errorf("cache not synced"), "Cache not synced")
+		cancel(fmt.Errorf("cache not synced"))
+		return fmt.Errorf("cache not synced")
+	}
+	logger.Info("Cache synced")
+
 	// start driver
-	dvr, err := driver.Start(ctx, config, deviceStateManager, podManager)
+	dvr, err := driver.Start(ctx, config, deviceStateManager, podManager, cdi)
 	if err != nil {
 		return fmt.Errorf("failed to start DRA driver: %w", err)
 	}
+
+	// Set up the republish callback so the device state manager can trigger resource republishing
+	deviceStateManager.SetRepublishCallback(dvr.PublishResources)
 
 	// create cni runtime
 	cniRuntime := cni.New(consts.DriverName, []string{"/opt/cni/bin"})

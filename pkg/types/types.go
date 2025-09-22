@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	configapi "github.com/SchSeba/dra-driver-sriov/pkg/api/virtualfunction/v1alpha1"
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -25,9 +26,11 @@ type PreparedDevicesByClaimID map[k8stypes.UID]PreparedDevices
 // PreparedClaimsByPodUID is a map of pod uid to map of claim ID to prepared devices
 type PreparedClaimsByPodUID map[k8stypes.UID]PreparedDevicesByClaimID
 
-type PerDeviceCDIContainerEdits map[string]*cdiapi.ContainerEdits
-type PerDeviceNetAttachDefs map[string]string
-type PerDeviceIfName map[string]string
+type NetworkDataChanStruct struct {
+	PreparedDevice    *PreparedDevice
+	NetworkDeviceData *resourceapi.NetworkDeviceData
+}
+type NetworkDataChanStructList []*NetworkDataChanStruct
 
 // AddDeviceIDToNetConf adds the deviceID (PCI address) to the netconf
 func AddDeviceIDToNetConf(originalConfig, deviceID string) (string, error) {
@@ -57,14 +60,13 @@ type OpaqueDeviceConfig struct {
 type PreparedDevice struct {
 	Device              drapbv1.Device
 	ClaimNamespacedName kubeletplugin.NamespacedObject
-	PodSandboxID        string
-	PodUID              k8stypes.UID
-	PodName             string
-	PodNamespace        string
-	PodNetworkNamespace string
 	ContainerEdits      *cdiapi.ContainerEdits
-	NetAttachDefConfig  string
+	Config              *configapi.VfConfig
 	IfName              string
+	PciAddress          string
+	PodUID              string
+	NetAttachDefConfig  string
+	OriginalDriver      string // Store original driver for restoration during unprepare
 }
 
 type Checkpoint struct {

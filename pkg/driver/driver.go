@@ -29,6 +29,7 @@ import (
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
 
+	"github.com/SchSeba/dra-driver-sriov/pkg/cdi"
 	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 	"github.com/SchSeba/dra-driver-sriov/pkg/devicestate"
 	"github.com/SchSeba/dra-driver-sriov/pkg/podmanager"
@@ -43,17 +44,19 @@ type Driver struct {
 	healthcheck        *Healthcheck
 	cancelCtx          func(error)
 	config             *sriovdratype.Config
+	cdi                *cdi.CDIHandler
 }
 
 // Start creates a new DRA driver and starts the kubelet plugin and the healthcheck service after publishing
 // the available resources
-func Start(ctx context.Context, config *sriovdratype.Config, deviceStateManager *devicestate.DeviceStateManager, podManager *podmanager.PodManager) (*Driver, error) {
+func Start(ctx context.Context, config *sriovdratype.Config, deviceStateManager *devicestate.DeviceStateManager, podManager *podmanager.PodManager, cdi *cdi.CDIHandler) (*Driver, error) {
 	driver := &Driver{
 		client:             config.K8sClient.Interface,
 		cancelCtx:          config.CancelMainCtx,
 		config:             config,
 		deviceStateManager: deviceStateManager,
 		podManager:         podManager,
+		cdi:                cdi,
 	}
 
 	helper, err := kubeletplugin.Start(

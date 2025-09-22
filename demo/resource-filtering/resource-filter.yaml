@@ -1,0 +1,125 @@
+apiVersion: sriovnetwork.openshift.io/v1alpha1
+kind: SriovResourceFilter
+metadata:
+  name: example-resource-filter
+  namespace: dra-sriov-driver
+spec:
+  # NodeSelector to match specific nodes
+  # Empty nodeSelector matches all nodes
+  nodeSelector:
+    kubernetes.io/hostname: dra-ctlplane-0.dra.lab
+  # Configs define multiple resource configurations
+  configs:
+  - # First config for eth0 device
+    resourceName: "eth0_resource"
+    resourceFilters:
+    - # Filter by vendor ID (Intel)
+      vendors: ["8086"]
+      # Filter by device ID  
+      # devices: ["154c", "10ed"]
+      # Filter by specific PCI addresses (optional)
+      # pciAddresses: ["0000:01:00.0", "0000:01:00.1"]
+      # Filter by Physical Function names (optional)
+      pfNames: ["eth0"]
+      # Filter by root devices (optional)
+      # rootDevices: ["0000:01:00.0"]
+      # Filter by NUMA nodes (optional)
+      # numaNodes: ["0"]
+      # Filter by driver names (optional)
+      # drivers: ["vfio-pci", "igb_uio"]
+  
+  - # Second config for eth1 device
+    resourceName: "eth1_resource"
+    resourceFilters:
+    - vendors: ["8086"]
+      pfNames: ["eth1"]
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vf-test4
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vf-test1
+  namespace: vf-test4
+spec:
+  config: |-
+    {
+        "cniVersion": "1.0.0",
+        "name": "vf-test1",
+        "type": "sriov",
+        "vlan": 0,
+        "spoofchk": "on",
+        "trust": "on",
+        "vlanQoS": 0,
+        "logLevel": "info",
+        "ipam": {
+            "type": "host-local",
+            "ranges": [
+                [
+                    {
+                        "subnet": "10.0.1.0/24"
+                    }
+                ]
+            ]
+        }
+    }
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: vf-test4
+  name: single-vf
+spec:
+  spec:
+    devices:
+      requests:
+      - name: vf
+        exactly:
+          deviceClassName: sriovnetwork.openshift.io
+          count: 1
+          selectors:
+          - cel:
+              expression: device.attributes["sriovnetwork.openshift.io"].resourceName == "eth1_resource"
+      config:
+      - requests: ["vf"]
+        opaque:
+          driver: sriovnetwork.openshift.io
+          parameters:
+            apiVersion: sriovnetwork.openshift.io/v1alpha1
+            kind: VfConfig
+            ifName: net1
+            netAttachDefName: vf-test1
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: vf-test4
+  name: pod0
+  labels:
+    app: pod
+spec:
+  terminationGracePeriodSeconds: 2
+  containers:
+  - name: ctr0
+    image: quay.io/schseba/toolbox:latest
+    command:
+      - /bin/bash
+      - -c
+      - sleep INF
+    securityContext:
+      runAsUser: 0
+      allowPrivilegeEscalation: true
+      capabilities:
+        add:
+          - NET_ADMIN
+          - NET_RAW
+    resources:
+      claims:
+      - name: vf
+  resourceClaims:
+  - name: vf
+    resourceClaimTemplateName: single-vf

@@ -17,16 +17,16 @@
 package v1alpha1
 
 import (
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
+
+	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 )
 
 const (
-	GroupName = "sriovnetwork.openshift.io"
+	GroupName = consts.GroupName
 	Version   = "v1alpha1"
 
 	VfConfigKind = "VfConfig"
@@ -40,10 +40,12 @@ var Decoder runtime.Decoder
 
 // VFConfig holds the set of parameters for configuring a VF.
 type VfConfig struct {
-	metav1.TypeMeta  `json:",inline"`
-	Driver           string `json:"driver,omitempty"`
-	IfName           string `json:"ifName,omitempty"`
-	NetAttachDefName string `json:"netAttachDefName,omitempty"`
+	metav1.TypeMeta       `json:",inline"`
+	Driver                string `json:"driver,omitempty"`
+	AddVhostMount         bool   `json:"addVhostMount,omitempty"`
+	IfName                string `json:"ifName,omitempty"`
+	NetAttachDefName      string `json:"netAttachDefName,omitempty"`
+	NetAttachDefNamespace string `json:"netAttachDefNamespace,omitempty"`
 }
 
 // DefaultGpuConfig provides the default GPU configuration.
@@ -53,21 +55,28 @@ func DefaultVfConfig() *VfConfig {
 			APIVersion: GroupName + "/" + Version,
 			Kind:       VfConfigKind,
 		},
-		Driver:           "default",
+		Driver:           "",
 		IfName:           "",
 		NetAttachDefName: "",
 	}
 }
 
+// Override overrides a VfConfig config with another VfConfig config.
+func (c *VfConfig) Override(other *VfConfig) {
+	if other.Driver != "" {
+		c.Driver = other.Driver
+	}
+	if other.IfName != "" {
+		c.IfName = other.IfName
+	}
+	if other.NetAttachDefName != "" {
+		c.NetAttachDefName = other.NetAttachDefName
+	}
+}
+
 // Normalize updates a VfConfig config with implied default values.
-func (c *VfConfig) Normalize() error {
-	if c == nil {
-		return fmt.Errorf("config is 'nil'")
-	}
-	if c.Driver == "" {
-		c.Driver = "default"
-	}
-	return nil
+// IMPLEMENT IF NEEDED
+func (c *VfConfig) Normalize() {
 }
 
 func init() {

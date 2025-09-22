@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 	resourceapi "k8s.io/api/resource/v1"
-	"k8s.io/apimachinery/pkg/types"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 )
@@ -19,21 +22,49 @@ func (d *Driver) PrepareResourceClaims(ctx context.Context, claims []*resourceap
 		return result, nil
 	}
 	logger := klog.FromContext(ctx).WithName("PrepareResourceClaims")
-	logger.V(1).Info("number of claims", "len", len(claims))
 	logger.V(3).Info("claims", "claims", claims)
 
-	// lets prepare the claims
+	// we share this between all the claims so we can enumerate network interfaces
+	ifNameIndex := 0
+	// let's prepare the claims
 	for _, claim := range claims {
-		logger.V(3).Info("Preparing claim", "claim", claim.UID)
-		result[claim.UID] = d.prepareResourceClaim(ctx, claim)
-		logger.V(3).Info("Prepared claim", "claim", claim.UID, "result", result[claim.UID])
+		logger.V(1).Info("Preparing claim", "claim", claim.UID)
+		logger.V(3).Info("Claim", "claim", claim)
+		result[claim.UID] = d.prepareResourceClaim(ctx, &ifNameIndex, claim)
+		logger.V(1).Info("Prepared claim", "claim", claim.UID, "result", result[claim.UID])
+		if result[claim.UID].Err != nil {
+			logger.Error(result[claim.UID].Err, "failed to prepare resource claim", "claim", claim)
+		}
+	}
+
+	preparedDevices, exists := d.podManager.GetDevicesByPodUID(claims[0].Status.ReservedFor[0].UID)
+	if !exists && len(claims) > 0 {
+		logger.Error(fmt.Errorf("no prepared devices found for pod %s", claims[0].Status.ReservedFor[0].UID), "Error preparing devices for claim")
+		return result, fmt.Errorf("no prepared devices found for pod %s", claims[0].Status.ReservedFor[0].UID)
+	}
+	// create a global spec file for the pod level environment variables
+	pciAddresses := []string{}
+	for _, preparedDevice := range preparedDevices {
+		device, exist := d.deviceStateManager.GetAllocatedDeviceByDeviceName(preparedDevice.Device.DeviceName)
+		if !exist {
+			logger.Error(fmt.Errorf("device not found for device name %s", preparedDevice.Device.DeviceName), "Error preparing devices for claim")
+			return result, fmt.Errorf("device not found for device name %s", preparedDevice.Device.DeviceName)
+		}
+		pciAddresses = append(pciAddresses, *device.Attributes[consts.AttributePciAddress].StringValue)
+
+	}
+
+	err := d.cdi.CreateGlobalPodSpecFile(string(claims[0].Status.ReservedFor[0].UID), pciAddresses)
+	if err != nil {
+		logger.Error(err, "Error creating global spec file for pod", "pod", claims[0].Status.ReservedFor[0].UID)
+		return result, fmt.Errorf("error creating global spec file for pod: %w", err)
 	}
 
 	logger.V(3).Info("Prepared claims", "result", result)
 	return result, nil
 }
 
-func (d *Driver) prepareResourceClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
+func (d *Driver) prepareResourceClaim(ctx context.Context, ifNameIndex *int, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
 	logger := klog.FromContext(ctx).WithName("prepareResourceClaim")
 
 	// Get pod info from claim
@@ -49,10 +80,15 @@ func (d *Driver) prepareResourceClaim(ctx context.Context, claim *resourceapi.Re
 		}
 	}
 
+	if claim.Status.Allocation == nil {
+		logger.Error(fmt.Errorf("claim not yet allocated"), "Prepare failed", "claim", claim.UID)
+		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim not yet allocated")}
+	}
+
 	// get the pod UID
 	podUID := claim.Status.ReservedFor[0].UID
 
-	// check if the pod claim already is prepared
+	// check if the pod claim is already prepared and return the prepared devices
 	preparedDevices, isAlreadyPrepared := d.podManager.Get(podUID, claim.UID)
 	if isAlreadyPrepared {
 		var prepared []kubeletplugin.Device
@@ -68,20 +104,21 @@ func (d *Driver) prepareResourceClaim(ctx context.Context, claim *resourceapi.Re
 	}
 
 	// if the pod claim is not prepared, prepare the devices for the claim
-	preparedDevices, err := d.deviceStateManager.PrepareDevices(ctx, claim)
+	preparedDevices, err := d.deviceStateManager.PrepareDevicesForClaim(ctx, ifNameIndex, claim)
 	if err != nil {
 		logger.Error(err, "Error preparing devices for claim", "claim", claim.UID)
 		return kubeletplugin.PrepareResult{
 			Err: fmt.Errorf("error preparing devices for claim %v: %w", claim.UID, err),
 		}
 	}
+
 	var prepared []kubeletplugin.Device
-	for _, preparedPB := range preparedDevices {
+	for _, preparedDevice := range preparedDevices {
 		prepared = append(prepared, kubeletplugin.Device{
-			Requests:     preparedPB.Device.GetRequestNames(),
-			PoolName:     preparedPB.Device.GetPoolName(),
-			DeviceName:   preparedPB.Device.GetDeviceName(),
-			CDIDeviceIDs: preparedPB.Device.GetCDIDeviceIDs(),
+			Requests:     preparedDevice.Device.GetRequestNames(),
+			PoolName:     preparedDevice.Device.GetPoolName(),
+			DeviceName:   preparedDevice.Device.GetDeviceName(),
+			CDIDeviceIDs: preparedDevice.Device.GetCDIDeviceIDs(),
 		})
 	}
 
@@ -93,15 +130,48 @@ func (d *Driver) prepareResourceClaim(ctx context.Context, claim *resourceapi.Re
 		}
 	}
 
+	// Store original devices list to preserve across conflict retries
+	originalDevices := claim.Status.Devices
+
+	err = wait.ExponentialBackoffWithContext(ctx, consts.Backoff, func(ctx context.Context) (bool, error) {
+		_, updateErr := d.client.ResourceV1().ResourceClaims(claim.Namespace).UpdateStatus(ctx, claim, metav1.UpdateOptions{})
+		if updateErr != nil {
+			// If this is a conflict error, fetch fresh claim and copy over devices list
+			if apierrors.IsConflict(updateErr) {
+				logger.V(2).Info("Conflict detected, refreshing claim", "claim", claim.UID)
+
+				freshClaim, fetchErr := d.client.ResourceV1().ResourceClaims(claim.Namespace).Get(ctx, claim.Name, metav1.GetOptions{})
+				if fetchErr != nil {
+					logger.V(2).Info("Failed to fetch fresh claim", "claim", claim.UID, "error", fetchErr.Error())
+					return false, nil // Continue retrying
+				}
+
+				// Copy original devices list to fresh claim
+				freshClaim.Status.Devices = originalDevices
+				claim = freshClaim // Use fresh claim for next retry
+
+				logger.V(2).Info("Refreshed claim, retrying status update", "claim", claim.UID)
+			} else {
+				logger.V(2).Info("Retrying claim status update", "claim", claim.UID, "error", updateErr.Error())
+			}
+			return false, nil // Return false to continue retrying, nil to not fail immediately
+		}
+		return true, nil // Success
+	})
+
+	if err != nil {
+		logger.Error(err, "Failed to update claim status after retries", "claim", claim.UID)
+	}
+
 	logger.V(3).Info("Returning prepared devices for claim", "claim", claim.UID, "prepared", prepared)
 	return kubeletplugin.PrepareResult{Devices: prepared}
 }
 
-func (d *Driver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
+func (d *Driver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[k8stypes.UID]error, error) {
 	logger := klog.FromContext(ctx).WithName("UnprepareResourceClaims")
 	logger.V(1).Info("UnprepareResourceClaims is called", "number of claims", len(claims))
 	logger.V(3).Info("claims", "claims", claims)
-	result := make(map[types.UID]error)
+	result := make(map[k8stypes.UID]error)
 
 	for _, claim := range claims {
 		result[claim.UID] = d.unprepareResourceClaim(ctx, claim)
