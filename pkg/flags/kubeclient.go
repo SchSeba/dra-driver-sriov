@@ -37,6 +37,7 @@ var (
 	Scheme = runtime.NewScheme()
 )
 
+//nolint:gochecknoinits // Required for Kubernetes scheme registration
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(Scheme))
 	utilruntime.Must(netattdefv1.AddToScheme(Scheme))

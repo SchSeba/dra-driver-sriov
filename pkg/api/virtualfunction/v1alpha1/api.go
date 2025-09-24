@@ -79,6 +79,7 @@ func (c *VfConfig) Override(other *VfConfig) {
 func (c *VfConfig) Normalize() {
 }
 
+//nolint:gochecknoinits // Required for Kubernetes scheme registration
 func init() {
 	// Create a new scheme and add our types to it. If at some point in the
 	// future a new version of the configuration API becomes necessary, then

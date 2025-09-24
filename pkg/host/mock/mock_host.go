@@ -18,32 +18,32 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockHostInterface is a mock of HostInterface interface.
-type MockHostInterface struct {
+// MockInterface is a mock of Interface interface.
+type MockInterface struct {
 	ctrl     *gomock.Controller
-	recorder *MockHostInterfaceMockRecorder
+	recorder *MockInterfaceMockRecorder
 	isgomock struct{}
 }
 
-// MockHostInterfaceMockRecorder is the mock recorder for MockHostInterface.
-type MockHostInterfaceMockRecorder struct {
-	mock *MockHostInterface
+// MockInterfaceMockRecorder is the mock recorder for MockInterface.
+type MockInterfaceMockRecorder struct {
+	mock *MockInterface
 }
 
-// NewMockHostInterface creates a new mock instance.
-func NewMockHostInterface(ctrl *gomock.Controller) *MockHostInterface {
-	mock := &MockHostInterface{ctrl: ctrl}
-	mock.recorder = &MockHostInterfaceMockRecorder{mock}
+// NewMockInterface creates a new mock instance.
+func NewMockInterface(ctrl *gomock.Controller) *MockInterface {
+	mock := &MockInterface{ctrl: ctrl}
+	mock.recorder = &MockInterfaceMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockHostInterface) EXPECT() *MockHostInterfaceMockRecorder {
+func (m *MockInterface) EXPECT() *MockInterfaceMockRecorder {
 	return m.recorder
 }
 
 // BindDefaultDriver mocks base method.
-func (m *MockHostInterface) BindDefaultDriver(pciAddress string) error {
+func (m *MockInterface) BindDefaultDriver(pciAddress string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BindDefaultDriver", pciAddress)
 	ret0, _ := ret[0].(error)
@@ -51,13 +51,13 @@ func (m *MockHostInterface) BindDefaultDriver(pciAddress string) error {
 }
 
 // BindDefaultDriver indicates an expected call of BindDefaultDriver.
-func (mr *MockHostInterfaceMockRecorder) BindDefaultDriver(pciAddress any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) BindDefaultDriver(pciAddress any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindDefaultDriver", reflect.TypeOf((*MockHostInterface)(nil).BindDefaultDriver), pciAddress)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindDefaultDriver", reflect.TypeOf((*MockInterface)(nil).BindDefaultDriver), pciAddress)
 }
 
 // BindDeviceDriver mocks base method.
-func (m *MockHostInterface) BindDeviceDriver(pciAddress string, config *v1alpha1.VfConfig) (string, error) {
+func (m *MockInterface) BindDeviceDriver(pciAddress string, config *v1alpha1.VfConfig) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BindDeviceDriver", pciAddress, config)
 	ret0, _ := ret[0].(string)
@@ -66,13 +66,13 @@ func (m *MockHostInterface) BindDeviceDriver(pciAddress string, config *v1alpha1
 }
 
 // BindDeviceDriver indicates an expected call of BindDeviceDriver.
-func (mr *MockHostInterfaceMockRecorder) BindDeviceDriver(pciAddress, config any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) BindDeviceDriver(pciAddress, config any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindDeviceDriver", reflect.TypeOf((*MockHostInterface)(nil).BindDeviceDriver), pciAddress, config)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindDeviceDriver", reflect.TypeOf((*MockInterface)(nil).BindDeviceDriver), pciAddress, config)
 }
 
 // BindDriverByBusAndDevice mocks base method.
-func (m *MockHostInterface) BindDriverByBusAndDevice(device, driver string) error {
+func (m *MockInterface) BindDriverByBusAndDevice(device, driver string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BindDriverByBusAndDevice", device, driver)
 	ret0, _ := ret[0].(error)
@@ -80,13 +80,13 @@ func (m *MockHostInterface) BindDriverByBusAndDevice(device, driver string) erro
 }
 
 // BindDriverByBusAndDevice indicates an expected call of BindDriverByBusAndDevice.
-func (mr *MockHostInterfaceMockRecorder) BindDriverByBusAndDevice(device, driver any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) BindDriverByBusAndDevice(device, driver any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindDriverByBusAndDevice", reflect.TypeOf((*MockHostInterface)(nil).BindDriverByBusAndDevice), device, driver)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindDriverByBusAndDevice", reflect.TypeOf((*MockInterface)(nil).BindDriverByBusAndDevice), device, driver)
 }
 
 // EnsureDpdkModuleLoaded mocks base method.
-func (m *MockHostInterface) EnsureDpdkModuleLoaded(driver string) error {
+func (m *MockInterface) EnsureDpdkModuleLoaded(driver string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EnsureDpdkModuleLoaded", driver)
 	ret0, _ := ret[0].(error)
@@ -94,13 +94,13 @@ func (m *MockHostInterface) EnsureDpdkModuleLoaded(driver string) error {
 }
 
 // EnsureDpdkModuleLoaded indicates an expected call of EnsureDpdkModuleLoaded.
-func (mr *MockHostInterfaceMockRecorder) EnsureDpdkModuleLoaded(driver any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) EnsureDpdkModuleLoaded(driver any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureDpdkModuleLoaded", reflect.TypeOf((*MockHostInterface)(nil).EnsureDpdkModuleLoaded), driver)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureDpdkModuleLoaded", reflect.TypeOf((*MockInterface)(nil).EnsureDpdkModuleLoaded), driver)
 }
 
 // EnsureVhostModulesLoaded mocks base method.
-func (m *MockHostInterface) EnsureVhostModulesLoaded() error {
+func (m *MockInterface) EnsureVhostModulesLoaded() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EnsureVhostModulesLoaded")
 	ret0, _ := ret[0].(error)
@@ -108,13 +108,13 @@ func (m *MockHostInterface) EnsureVhostModulesLoaded() error {
 }
 
 // EnsureVhostModulesLoaded indicates an expected call of EnsureVhostModulesLoaded.
-func (mr *MockHostInterfaceMockRecorder) EnsureVhostModulesLoaded() *gomock.Call {
+func (mr *MockInterfaceMockRecorder) EnsureVhostModulesLoaded() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureVhostModulesLoaded", reflect.TypeOf((*MockHostInterface)(nil).EnsureVhostModulesLoaded))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureVhostModulesLoaded", reflect.TypeOf((*MockInterface)(nil).EnsureVhostModulesLoaded))
 }
 
 // GetDriverByBusAndDevice mocks base method.
-func (m *MockHostInterface) GetDriverByBusAndDevice(device string) (string, error) {
+func (m *MockInterface) GetDriverByBusAndDevice(device string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDriverByBusAndDevice", device)
 	ret0, _ := ret[0].(string)
@@ -123,13 +123,13 @@ func (m *MockHostInterface) GetDriverByBusAndDevice(device string) (string, erro
 }
 
 // GetDriverByBusAndDevice indicates an expected call of GetDriverByBusAndDevice.
-func (mr *MockHostInterfaceMockRecorder) GetDriverByBusAndDevice(device any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) GetDriverByBusAndDevice(device any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDriverByBusAndDevice", reflect.TypeOf((*MockHostInterface)(nil).GetDriverByBusAndDevice), device)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDriverByBusAndDevice", reflect.TypeOf((*MockInterface)(nil).GetDriverByBusAndDevice), device)
 }
 
 // GetNicSriovMode mocks base method.
-func (m *MockHostInterface) GetNicSriovMode(pciAddr string) string {
+func (m *MockInterface) GetNicSriovMode(pciAddr string) string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNicSriovMode", pciAddr)
 	ret0, _ := ret[0].(string)
@@ -137,13 +137,13 @@ func (m *MockHostInterface) GetNicSriovMode(pciAddr string) string {
 }
 
 // GetNicSriovMode indicates an expected call of GetNicSriovMode.
-func (mr *MockHostInterfaceMockRecorder) GetNicSriovMode(pciAddr any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) GetNicSriovMode(pciAddr any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNicSriovMode", reflect.TypeOf((*MockHostInterface)(nil).GetNicSriovMode), pciAddr)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNicSriovMode", reflect.TypeOf((*MockInterface)(nil).GetNicSriovMode), pciAddr)
 }
 
 // GetNumaNode mocks base method.
-func (m *MockHostInterface) GetNumaNode(pciAddress string) (string, error) {
+func (m *MockInterface) GetNumaNode(pciAddress string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNumaNode", pciAddress)
 	ret0, _ := ret[0].(string)
@@ -152,13 +152,13 @@ func (m *MockHostInterface) GetNumaNode(pciAddress string) (string, error) {
 }
 
 // GetNumaNode indicates an expected call of GetNumaNode.
-func (mr *MockHostInterfaceMockRecorder) GetNumaNode(pciAddress any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) GetNumaNode(pciAddress any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumaNode", reflect.TypeOf((*MockHostInterface)(nil).GetNumaNode), pciAddress)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumaNode", reflect.TypeOf((*MockInterface)(nil).GetNumaNode), pciAddress)
 }
 
 // GetParentPciAddress mocks base method.
-func (m *MockHostInterface) GetParentPciAddress(pciAddress string) (string, error) {
+func (m *MockInterface) GetParentPciAddress(pciAddress string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetParentPciAddress", pciAddress)
 	ret0, _ := ret[0].(string)
@@ -167,13 +167,13 @@ func (m *MockHostInterface) GetParentPciAddress(pciAddress string) (string, erro
 }
 
 // GetParentPciAddress indicates an expected call of GetParentPciAddress.
-func (mr *MockHostInterfaceMockRecorder) GetParentPciAddress(pciAddress any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) GetParentPciAddress(pciAddress any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParentPciAddress", reflect.TypeOf((*MockHostInterface)(nil).GetParentPciAddress), pciAddress)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParentPciAddress", reflect.TypeOf((*MockInterface)(nil).GetParentPciAddress), pciAddress)
 }
 
 // GetVFIODeviceFile mocks base method.
-func (m *MockHostInterface) GetVFIODeviceFile(pciAddress string) (string, string, error) {
+func (m *MockInterface) GetVFIODeviceFile(pciAddress string) (string, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVFIODeviceFile", pciAddress)
 	ret0, _ := ret[0].(string)
@@ -183,13 +183,13 @@ func (m *MockHostInterface) GetVFIODeviceFile(pciAddress string) (string, string
 }
 
 // GetVFIODeviceFile indicates an expected call of GetVFIODeviceFile.
-func (mr *MockHostInterfaceMockRecorder) GetVFIODeviceFile(pciAddress any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) GetVFIODeviceFile(pciAddress any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVFIODeviceFile", reflect.TypeOf((*MockHostInterface)(nil).GetVFIODeviceFile), pciAddress)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVFIODeviceFile", reflect.TypeOf((*MockInterface)(nil).GetVFIODeviceFile), pciAddress)
 }
 
 // GetVFList mocks base method.
-func (m *MockHostInterface) GetVFList(pfPciAddress string) ([]host.VFInfo, error) {
+func (m *MockInterface) GetVFList(pfPciAddress string) ([]host.VFInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVFList", pfPciAddress)
 	ret0, _ := ret[0].([]host.VFInfo)
@@ -198,13 +198,13 @@ func (m *MockHostInterface) GetVFList(pfPciAddress string) ([]host.VFInfo, error
 }
 
 // GetVFList indicates an expected call of GetVFList.
-func (mr *MockHostInterfaceMockRecorder) GetVFList(pfPciAddress any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) GetVFList(pfPciAddress any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVFList", reflect.TypeOf((*MockHostInterface)(nil).GetVFList), pfPciAddress)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVFList", reflect.TypeOf((*MockInterface)(nil).GetVFList), pfPciAddress)
 }
 
 // IsDpdkDriver mocks base method.
-func (m *MockHostInterface) IsDpdkDriver(driver string) bool {
+func (m *MockInterface) IsDpdkDriver(driver string) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsDpdkDriver", driver)
 	ret0, _ := ret[0].(bool)
@@ -212,13 +212,13 @@ func (m *MockHostInterface) IsDpdkDriver(driver string) bool {
 }
 
 // IsDpdkDriver indicates an expected call of IsDpdkDriver.
-func (mr *MockHostInterfaceMockRecorder) IsDpdkDriver(driver any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) IsDpdkDriver(driver any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDpdkDriver", reflect.TypeOf((*MockHostInterface)(nil).IsDpdkDriver), driver)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDpdkDriver", reflect.TypeOf((*MockInterface)(nil).IsDpdkDriver), driver)
 }
 
 // IsKernelModuleLoaded mocks base method.
-func (m *MockHostInterface) IsKernelModuleLoaded(moduleName string) bool {
+func (m *MockInterface) IsKernelModuleLoaded(moduleName string) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsKernelModuleLoaded", moduleName)
 	ret0, _ := ret[0].(bool)
@@ -226,13 +226,13 @@ func (m *MockHostInterface) IsKernelModuleLoaded(moduleName string) bool {
 }
 
 // IsKernelModuleLoaded indicates an expected call of IsKernelModuleLoaded.
-func (mr *MockHostInterfaceMockRecorder) IsKernelModuleLoaded(moduleName any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) IsKernelModuleLoaded(moduleName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsKernelModuleLoaded", reflect.TypeOf((*MockHostInterface)(nil).IsKernelModuleLoaded), moduleName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsKernelModuleLoaded", reflect.TypeOf((*MockInterface)(nil).IsKernelModuleLoaded), moduleName)
 }
 
 // IsSriovPF mocks base method.
-func (m *MockHostInterface) IsSriovPF(pciAddress string) bool {
+func (m *MockInterface) IsSriovPF(pciAddress string) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsSriovPF", pciAddress)
 	ret0, _ := ret[0].(bool)
@@ -240,13 +240,13 @@ func (m *MockHostInterface) IsSriovPF(pciAddress string) bool {
 }
 
 // IsSriovPF indicates an expected call of IsSriovPF.
-func (mr *MockHostInterfaceMockRecorder) IsSriovPF(pciAddress any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) IsSriovPF(pciAddress any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSriovPF", reflect.TypeOf((*MockHostInterface)(nil).IsSriovPF), pciAddress)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSriovPF", reflect.TypeOf((*MockInterface)(nil).IsSriovPF), pciAddress)
 }
 
 // IsSriovVF mocks base method.
-func (m *MockHostInterface) IsSriovVF(pciAddress string) bool {
+func (m *MockInterface) IsSriovVF(pciAddress string) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsSriovVF", pciAddress)
 	ret0, _ := ret[0].(bool)
@@ -254,13 +254,13 @@ func (m *MockHostInterface) IsSriovVF(pciAddress string) bool {
 }
 
 // IsSriovVF indicates an expected call of IsSriovVF.
-func (mr *MockHostInterfaceMockRecorder) IsSriovVF(pciAddress any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) IsSriovVF(pciAddress any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSriovVF", reflect.TypeOf((*MockHostInterface)(nil).IsSriovVF), pciAddress)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSriovVF", reflect.TypeOf((*MockInterface)(nil).IsSriovVF), pciAddress)
 }
 
 // LoadKernelModule mocks base method.
-func (m *MockHostInterface) LoadKernelModule(moduleName string) error {
+func (m *MockInterface) LoadKernelModule(moduleName string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LoadKernelModule", moduleName)
 	ret0, _ := ret[0].(error)
@@ -268,13 +268,13 @@ func (m *MockHostInterface) LoadKernelModule(moduleName string) error {
 }
 
 // LoadKernelModule indicates an expected call of LoadKernelModule.
-func (mr *MockHostInterfaceMockRecorder) LoadKernelModule(moduleName any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) LoadKernelModule(moduleName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadKernelModule", reflect.TypeOf((*MockHostInterface)(nil).LoadKernelModule), moduleName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadKernelModule", reflect.TypeOf((*MockInterface)(nil).LoadKernelModule), moduleName)
 }
 
 // PCI mocks base method.
-func (m *MockHostInterface) PCI() (*ghw.PCIInfo, error) {
+func (m *MockInterface) PCI() (*ghw.PCIInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PCI")
 	ret0, _ := ret[0].(*ghw.PCIInfo)
@@ -283,13 +283,13 @@ func (m *MockHostInterface) PCI() (*ghw.PCIInfo, error) {
 }
 
 // PCI indicates an expected call of PCI.
-func (mr *MockHostInterfaceMockRecorder) PCI() *gomock.Call {
+func (mr *MockInterfaceMockRecorder) PCI() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PCI", reflect.TypeOf((*MockHostInterface)(nil).PCI))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PCI", reflect.TypeOf((*MockInterface)(nil).PCI))
 }
 
 // RestoreDeviceDriver mocks base method.
-func (m *MockHostInterface) RestoreDeviceDriver(pciAddress, originalDriver string) error {
+func (m *MockInterface) RestoreDeviceDriver(pciAddress, originalDriver string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RestoreDeviceDriver", pciAddress, originalDriver)
 	ret0, _ := ret[0].(error)
@@ -297,13 +297,13 @@ func (m *MockHostInterface) RestoreDeviceDriver(pciAddress, originalDriver strin
 }
 
 // RestoreDeviceDriver indicates an expected call of RestoreDeviceDriver.
-func (mr *MockHostInterfaceMockRecorder) RestoreDeviceDriver(pciAddress, originalDriver any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) RestoreDeviceDriver(pciAddress, originalDriver any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoreDeviceDriver", reflect.TypeOf((*MockHostInterface)(nil).RestoreDeviceDriver), pciAddress, originalDriver)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoreDeviceDriver", reflect.TypeOf((*MockInterface)(nil).RestoreDeviceDriver), pciAddress, originalDriver)
 }
 
 // TryGetInterfaceName mocks base method.
-func (m *MockHostInterface) TryGetInterfaceName(pciAddr string) string {
+func (m *MockInterface) TryGetInterfaceName(pciAddr string) string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TryGetInterfaceName", pciAddr)
 	ret0, _ := ret[0].(string)
@@ -311,13 +311,13 @@ func (m *MockHostInterface) TryGetInterfaceName(pciAddr string) string {
 }
 
 // TryGetInterfaceName indicates an expected call of TryGetInterfaceName.
-func (mr *MockHostInterfaceMockRecorder) TryGetInterfaceName(pciAddr any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) TryGetInterfaceName(pciAddr any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TryGetInterfaceName", reflect.TypeOf((*MockHostInterface)(nil).TryGetInterfaceName), pciAddr)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TryGetInterfaceName", reflect.TypeOf((*MockInterface)(nil).TryGetInterfaceName), pciAddr)
 }
 
 // UnbindDriverByBusAndDevice mocks base method.
-func (m *MockHostInterface) UnbindDriverByBusAndDevice(device string) error {
+func (m *MockInterface) UnbindDriverByBusAndDevice(device string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UnbindDriverByBusAndDevice", device)
 	ret0, _ := ret[0].(error)
@@ -325,7 +325,7 @@ func (m *MockHostInterface) UnbindDriverByBusAndDevice(device string) error {
 }
 
 // UnbindDriverByBusAndDevice indicates an expected call of UnbindDriverByBusAndDevice.
-func (mr *MockHostInterfaceMockRecorder) UnbindDriverByBusAndDevice(device any) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) UnbindDriverByBusAndDevice(device any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnbindDriverByBusAndDevice", reflect.TypeOf((*MockHostInterface)(nil).UnbindDriverByBusAndDevice), device)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnbindDriverByBusAndDevice", reflect.TypeOf((*MockInterface)(nil).UnbindDriverByBusAndDevice), device)
 }

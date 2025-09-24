@@ -21,18 +21,18 @@ const (
 	cdiCommonDeviceName = "dra-driver-sriov"
 )
 
-type CDIHandler struct {
+type Handler struct {
 	cache *cdiapi.Cache
 }
 
-func NewCDIHandler(cdiRootPath string) (*CDIHandler, error) {
+func NewHandler(cdiRootPath string) (*Handler, error) {
 	cache, err := cdiapi.NewCache(
 		cdiapi.WithSpecDirs(cdiRootPath),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a new CDI cache: %w", err)
 	}
-	handler := &CDIHandler{
+	handler := &Handler{
 		cache: cache,
 	}
 
@@ -40,7 +40,7 @@ func NewCDIHandler(cdiRootPath string) (*CDIHandler, error) {
 }
 
 // NOT used right now
-func (cdi *CDIHandler) CreateCommonSpecFile() error {
+func (cdi *Handler) CreateCommonSpecFile() error {
 	spec := &cdispec.Spec{
 		Kind: cdiKind,
 		Devices: []cdispec.Device{
@@ -70,7 +70,7 @@ func (cdi *CDIHandler) CreateCommonSpecFile() error {
 	return cdi.cache.WriteSpec(spec, specName)
 }
 
-func (cdi *CDIHandler) CreateClaimSpecFile(preparedDevices types.PreparedDevices) error {
+func (cdi *Handler) CreateClaimSpecFile(preparedDevices types.PreparedDevices) error {
 	claimUID := string(preparedDevices[0].ClaimNamespacedName.UID)
 	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
 
@@ -96,7 +96,7 @@ func (cdi *CDIHandler) CreateClaimSpecFile(preparedDevices types.PreparedDevices
 	return cdi.cache.WriteSpec(spec, specName)
 }
 
-func (cdi *CDIHandler) CreateGlobalPodSpecFile(podUID string, pciAddresses []string) error {
+func (cdi *Handler) CreateGlobalPodSpecFile(podUID string, pciAddresses []string) error {
 	envs := []string{fmt.Sprintf("SRIOVNETWORK_PCI_ADDRESSES=%s", strings.Join(pciAddresses, ","))}
 	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, podUID)
 
@@ -119,18 +119,17 @@ func (cdi *CDIHandler) CreateGlobalPodSpecFile(podUID string, pciAddresses []str
 	spec.Version = minVersion
 
 	return cdi.cache.WriteSpec(spec, specName)
-
 }
 
-func (cdi *CDIHandler) DeleteSpecFile(uid string) error {
+func (cdi *Handler) DeleteSpecFile(uid string) error {
 	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, uid)
 	return cdi.cache.RemoveSpec(specName)
 }
 
-func (cdi *CDIHandler) GetClaimDevices(claimUID string, device string) string {
+func (cdi *Handler) GetClaimDevices(claimUID string, device string) string {
 	return cdiparser.QualifiedName(cdiVendor, cdiClass, fmt.Sprintf("%s-%s", claimUID, device))
 }
 
-func (cdi *CDIHandler) GetPodSpecName(podUID string) string {
+func (cdi *Handler) GetPodSpecName(podUID string) string {
 	return cdiparser.QualifiedName(cdiVendor, cdiClass, podUID)
 }

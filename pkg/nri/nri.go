@@ -225,6 +225,7 @@ func (p *Plugin) updateClaimNetworkDataWithRetry(ctx context.Context, claim *res
 
 	if err != nil {
 		logger.Error(err, "Failed to update claim status after retries", "claim", claim.UID)
+		return err
 	}
 	return nil
 }

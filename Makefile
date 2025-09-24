@@ -30,7 +30,7 @@ CMDS := $(patsubst ./cmd/%/,%,$(sort $(dir $(wildcard ./cmd/*/))))
 CMD_TARGETS := $(patsubst %,cmd-%, $(CMDS))
 
 CHECK_TARGETS := assert-fmt vet lint
-MAKE_TARGETS := binaries build check vendor fmt test examples cmds coverage generate mock-generate build-image $(CHECK_TARGETS)
+MAKE_TARGETS := binaries build check vendor fmt test cmds coverage generate mock-generate build-image $(CHECK_TARGETS)
 
 TARGETS := $(MAKE_TARGETS) $(CMD_TARGETS)
 
@@ -54,11 +54,7 @@ $(CMD_TARGETS): cmd-%:
 build:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build ./...
 
-examples: $(EXAMPLE_TARGETS)
-$(EXAMPLE_TARGETS): example-%:
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build ./examples/$(*)
-
-all: check test build binary
+all: check test build
 check: $(CHECK_TARGETS)
 
 # Update the vendor folder
@@ -85,7 +81,7 @@ assert-fmt:
 
 GOLANGCI_LINT = $(BIN_DIR)/golangci-lint
 lint: $(GOLANGCI_LINT)
-	$(GOLANGCI_LINT) run ./...
+	$(GOLANGCI_LINT) run ./cmd/... ./pkg/...
 
 $(GOLANGCI_LINT):
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION))

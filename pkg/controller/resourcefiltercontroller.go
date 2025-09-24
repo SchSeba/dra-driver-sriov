@@ -55,11 +55,11 @@ type SriovResourceFilterReconciler struct {
 	namespace             string
 	currentResourceFilter *sriovdrav1alpha1.SriovResourceFilter
 	log                   klog.Logger
-	deviceStateManager    *devicestate.DeviceStateManager
+	deviceStateManager    *devicestate.Manager
 }
 
 // NewSriovResourceFilterReconciler creates a new SriovResourceFilterReconciler
-func NewSriovResourceFilterReconciler(client client.Client, nodeName, namespace string, deviceStateManager *devicestate.DeviceStateManager) *SriovResourceFilterReconciler {
+func NewSriovResourceFilterReconciler(client client.Client, nodeName, namespace string, deviceStateManager *devicestate.Manager) *SriovResourceFilterReconciler {
 	return &SriovResourceFilterReconciler{
 		Client:             client,
 		deviceStateManager: deviceStateManager,
@@ -372,25 +372,25 @@ func (r *SriovResourceFilterReconciler) SetupWithManager(mgr ctrl.Manager) error
 	}
 
 	delayedEventHandler := handler.Funcs{
-		CreateFunc: func(c context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+		CreateFunc: func(_ context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			r.log.Info("Enqueuing sync for create event",
 				"resource", e.Object.GetName(),
 				"type", e.Object.GetObjectKind().GroupVersionKind().String())
 			qHandler(w)
 		},
-		UpdateFunc: func(c context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+		UpdateFunc: func(_ context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			r.log.Info("Enqueuing sync for update event",
 				"resource", e.ObjectNew.GetName(),
 				"type", e.ObjectNew.GetObjectKind().GroupVersionKind().String())
 			qHandler(w)
 		},
-		DeleteFunc: func(c context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+		DeleteFunc: func(_ context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			r.log.Info("Enqueuing sync for delete event",
 				"resource", e.Object.GetName(),
 				"type", e.Object.GetObjectKind().GroupVersionKind().String())
 			qHandler(w)
 		},
-		GenericFunc: func(c context.Context, e event.TypedGenericEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+		GenericFunc: func(_ context.Context, e event.TypedGenericEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			r.log.Info("Enqueuing sync for generic event",
 				"resource", e.Object.GetName(),
 				"type", e.Object.GetObjectKind().GroupVersionKind().String())
@@ -400,14 +400,14 @@ func (r *SriovResourceFilterReconciler) SetupWithManager(mgr ctrl.Manager) error
 
 	// Node event handler - we care about node label changes
 	nodeEventHandler := handler.Funcs{
-		CreateFunc: func(c context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+		CreateFunc: func(_ context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			// Only care about our node
 			if e.Object.GetName() == r.nodeName {
 				r.log.Info("Enqueuing sync for node create event", "node", e.Object.GetName())
 				qHandler(w)
 			}
 		},
-		UpdateFunc: func(c context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+		UpdateFunc: func(_ context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			// Only care about our node and only if labels changed
 			if e.ObjectNew.GetName() == r.nodeName {
 				oldLabels := e.ObjectOld.GetLabels()
@@ -418,7 +418,7 @@ func (r *SriovResourceFilterReconciler) SetupWithManager(mgr ctrl.Manager) error
 				}
 			}
 		},
-		DeleteFunc: func(c context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+		DeleteFunc: func(_ context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			// Only care about our node
 			if e.Object.GetName() == r.nodeName {
 				r.log.Info("Enqueuing sync for node delete event", "node", e.Object.GetName())

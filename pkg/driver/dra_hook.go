@@ -51,7 +51,6 @@ func (d *Driver) PrepareResourceClaims(ctx context.Context, claims []*resourceap
 			return result, fmt.Errorf("device not found for device name %s", preparedDevice.Device.DeviceName)
 		}
 		pciAddresses = append(pciAddresses, *device.Attributes[consts.AttributePciAddress].StringValue)
-
 	}
 
 	err := d.cdi.CreateGlobalPodSpecFile(string(claims[0].Status.ReservedFor[0].UID), pciAddresses)
