@@ -1,0 +1,92 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vf-test5
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vf-test1
+  namespace: vf-test5
+spec:
+  config: |-
+    {
+        "cniVersion": "1.0.0",
+        "name": "vf-test1",
+        "type": "sriov",
+        "vlan": 0,
+        "spoofchk": "on",
+        "trust": "on",
+        "vlanQoS": 0,
+        "logLevel": "info",
+        "ipam": {
+            "type": "host-local",
+            "ranges": [
+                [
+                    {
+                        "subnet": "10.0.1.0/24"
+                    }
+                ]
+            ]
+        }
+    }
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: vf-test5
+  name: resource-alignment
+spec:
+  spec:
+    devices:
+      requests:
+      - name: vf
+        exactly:
+          deviceClassName: sriovnetwork.openshift.io
+      - name: gpu
+        exactly:
+          deviceClassName: gpu.example.com
+          count: 1
+      constraints:
+        - matchAttribute: "resource.kubernetes.io/numaNode"
+      config:
+      - requests: ["vf"]
+        opaque:
+          driver: sriovnetwork.openshift.io
+          parameters:
+            apiVersion: sriovnetwork.openshift.io/v1alpha1
+            kind: VfConfig
+            ifName: net1
+            netAttachDefName: vf-test1
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: vf-test5
+  name: pod0
+  labels:
+    app: pod
+spec:
+  terminationGracePeriodSeconds: 2
+  containers:
+  - name: ctr0
+    image: quay.io/schseba/toolbox:latest
+    command:
+      - /bin/bash
+      - -c
+      - sleep INF
+    securityContext:
+      runAsUser: 0
+      allowPrivilegeEscalation: true
+      capabilities:
+        add:
+          - NET_ADMIN
+          - NET_RAW
+    resources:
+      claims:
+      - name: vf
+  resourceClaims:
+  - name: vf
+    resourceClaimTemplateName: resource-alignment

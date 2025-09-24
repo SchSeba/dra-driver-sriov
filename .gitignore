@@ -1,0 +1,7 @@
+vendor/
+.config/
+.cache/
+.idea/
+.vscode/
+bin/
+coverage.out
