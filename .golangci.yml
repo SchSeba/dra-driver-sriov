@@ -1,0 +1,33 @@
+version: "2"
+
+run:
+  timeout: 15m
+  tests: false
+
+issues:
+  exclude-dirs:
+    - vendor
+    - .cache
+    - .config
+  exclude-files:
+    - ".*_mock.go"
+    - "zz_generated.*.go"
+
+linters:
+  default: none
+  enable:
+  - errcheck
+  - copyloopvar
+  - gochecknoinits
+  - gocritic
+  - gomodguard
+  - gosec
+  - govet
+  - ineffassign
+  - misspell
+  - revive
+  - staticcheck
+  - unconvert
+  - unparam
+  - unused
+  - whitespace

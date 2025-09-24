@@ -39,17 +39,17 @@ import (
 type Driver struct {
 	client             coreclientset.Interface
 	helper             *kubeletplugin.Helper
-	deviceStateManager *devicestate.DeviceStateManager
+	deviceStateManager *devicestate.Manager
 	podManager         *podmanager.PodManager
 	healthcheck        *Healthcheck
 	cancelCtx          func(error)
 	config             *sriovdratype.Config
-	cdi                *cdi.CDIHandler
+	cdi                *cdi.Handler
 }
 
 // Start creates a new DRA driver and starts the kubelet plugin and the healthcheck service after publishing
 // the available resources
-func Start(ctx context.Context, config *sriovdratype.Config, deviceStateManager *devicestate.DeviceStateManager, podManager *podmanager.PodManager, cdi *cdi.CDIHandler) (*Driver, error) {
+func Start(ctx context.Context, config *sriovdratype.Config, deviceStateManager *devicestate.Manager, podManager *podmanager.PodManager, cdi *cdi.Handler) (*Driver, error) {
 	driver := &Driver{
 		client:             config.K8sClient.Interface,
 		cancelCtx:          config.CancelMainCtx,
@@ -80,7 +80,9 @@ func Start(ctx context.Context, config *sriovdratype.Config, deviceStateManager 
 	}
 
 	// Publish resources
-	driver.PublishResources(ctx)
+	if err = driver.PublishResources(ctx); err != nil {
+		return nil, fmt.Errorf("failed to publish resources: %w", err)
+	}
 	return driver, nil
 }
 

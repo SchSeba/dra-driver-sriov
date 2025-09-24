@@ -154,13 +154,13 @@ func RunPlugin(ctx context.Context, config *types.Config) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	config.CancelMainCtx = cancel
 
-	cdi, err := cdi.NewCDIHandler(config.Flags.CdiRoot)
+	cdi, err := cdi.NewHandler(config.Flags.CdiRoot)
 	if err != nil {
 		return fmt.Errorf("unable to create CDI handler: %v", err)
 	}
 
 	// create device state manager
-	deviceStateManager, err := devicestate.NewDeviceStateManager(config, cdi)
+	deviceStateManager, err := devicestate.NewManager(config, cdi)
 	if err != nil {
 		return err
 	}

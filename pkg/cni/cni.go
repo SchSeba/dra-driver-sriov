@@ -81,13 +81,13 @@ func (rntm *Runtime) AttachNetwork(ctx context.Context, pod *api.PodSandbox, pod
 		return nil, fmt.Errorf("failed to GetCNIConfigFromSpec: %v", err)
 	}
 
-	confList, err := libcni.ConfFromBytes([]byte(rawNetConf))
+	pluginConf, err := libcni.NetworkPluginConfFromBytes(rawNetConf)
 	if err != nil {
-		return nil, fmt.Errorf("failed to ConfListFromBytes: %v", err)
+		return nil, fmt.Errorf("failed to NetworkPluginConfFromBytes: %v", err)
 	}
 	klog.FromContext(ctx).V(3).Info("Runtime.AttachNetwork", "deviceConfig", deviceConfig)
 
-	cniResult, err := rntm.CNIConfig.AddNetwork(ctx, confList, rt)
+	cniResult, err := rntm.CNIConfig.AddNetwork(ctx, pluginConf, rt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to AddNetwork: %v", err)
 	}
@@ -125,12 +125,12 @@ func (rntm *Runtime) DetachNetwork(
 		return fmt.Errorf("failed to GetCNIConfigFromSpec: %v", err)
 	}
 
-	confList, err := libcni.ConfFromBytes(rawNetConf)
+	pluginConf, err := libcni.NetworkPluginConfFromBytes(rawNetConf)
 	if err != nil {
-		return fmt.Errorf("failed to ConfListFromBytes: %v", err)
+		return fmt.Errorf("failed to NetworkPluginConfFromBytes: %v", err)
 	}
 	klog.FromContext(ctx).V(3).Info("Runtime.DetachNetwork", "deviceConfig", deviceConfig)
-	err = rntm.CNIConfig.DelNetwork(ctx, confList, rt)
+	err = rntm.CNIConfig.DelNetwork(ctx, pluginConf, rt)
 	if err != nil {
 		return fmt.Errorf("failed to DelNetwork: %v", err)
 	}

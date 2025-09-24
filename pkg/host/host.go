@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jaypipes/ghw"
 	"k8s.io/klog/v2"
@@ -16,6 +17,46 @@ import (
 	"github.com/SchSeba/dra-driver-sriov/pkg/consts"
 )
 
+var (
+	RootDir = ""
+)
+
+// Helper functions to build paths respecting RootDir
+
+// buildSysPath constructs a path under /sys with RootDir prefix if set
+func buildSysPath(path string) string {
+	if RootDir != "" {
+		return filepath.Join(RootDir, path)
+	}
+	return path
+}
+
+// buildSysBusPciPath constructs a PCI device path under /sys/bus/pci/devices
+func buildSysBusPciPath(pciAddress, subPath string) string {
+	basePath := filepath.Join(consts.SysBusPci, pciAddress)
+	if subPath != "" {
+		basePath = filepath.Join(basePath, subPath)
+	}
+	return buildSysPath(basePath)
+}
+
+// buildSysBusPciDriverPath constructs a driver path under /sys/bus/pci/drivers
+func buildSysBusPciDriverPath(driver, subPath string) string {
+	basePath := filepath.Join("/sys/bus/pci/drivers", driver)
+	if subPath != "" {
+		basePath = filepath.Join(basePath, subPath)
+	}
+	return buildSysPath(basePath)
+}
+
+// buildProcPath constructs a path under /proc with RootDir prefix if set
+func buildProcPath(path string) string {
+	if RootDir != "" {
+		return filepath.Join(RootDir, path)
+	}
+	return path
+}
+
 // VFInfo holds information about a Virtual Function
 type VFInfo struct {
 	PciAddress string
@@ -23,12 +64,12 @@ type VFInfo struct {
 	DeviceID   string
 }
 
-// HostInterface defines the unified interface for all host system operations.
+// Interface defines the unified interface for all host system operations.
 // This interface allows for easy mocking in unit tests by implementing mock versions
 // of all the host-related methods.
 //
 //go:generate mockgen -destination mock/mock_host.go -source host.go
-type HostInterface interface {
+type Interface interface {
 	// SR-IOV device utility functions
 	IsSriovVF(pciAddress string) bool
 	IsSriovPF(pciAddress string) bool
@@ -72,18 +113,27 @@ type HostInterface interface {
 type Host struct{}
 
 // NewHost creates a new Host instance
-func NewHost() HostInterface {
+func NewHost() Interface {
 	return &Host{}
 }
 
 // Global Helpers instance for use throughout the application
 var (
-	Helpers HostInterface
+	Helpers     Interface
+	helpersOnce sync.Once
 )
 
-// init initializes the global Helpers instance
-func init() {
-	Helpers = NewHost()
+// initHelpers initializes the global Helpers instance
+func initHelpers() {
+	helpersOnce.Do(func() {
+		Helpers = NewHost()
+	})
+}
+
+// GetHelpers returns the global Helpers instance, initializing it if necessary
+func GetHelpers() Interface {
+	initHelpers()
+	return Helpers
 }
 
 // SR-IOV Detection Functions
@@ -91,7 +141,7 @@ func init() {
 // IsSriovVF checks if a PCI device is an SR-IOV Virtual Function
 func (h *Host) IsSriovVF(pciAddress string) bool {
 	// Check if physfn symlink exists - this indicates it's a VF
-	physfnPath := fmt.Sprintf("/sys/bus/pci/devices/%s/physfn", pciAddress)
+	physfnPath := buildSysBusPciPath(pciAddress, "physfn")
 	if _, err := os.Lstat(physfnPath); err == nil {
 		return true
 	}
@@ -101,7 +151,7 @@ func (h *Host) IsSriovVF(pciAddress string) bool {
 // IsSriovPF checks if a PCI device is an SR-IOV Physical Function
 func (h *Host) IsSriovPF(pciAddress string) bool {
 	// Check if virtfn0 symlink exists - this indicates it's a PF with VFs
-	virtfnPath := fmt.Sprintf("/sys/bus/pci/devices/%s/virtfn0", pciAddress)
+	virtfnPath := buildSysBusPciPath(pciAddress, "virtfn0")
 	if _, err := os.Lstat(virtfnPath); err == nil {
 		return true
 	}
@@ -112,7 +162,7 @@ func (h *Host) IsSriovPF(pciAddress string) bool {
 func (h *Host) GetVFList(pfPciAddress string) ([]VFInfo, error) {
 	var vfList []VFInfo
 
-	pfPath := fmt.Sprintf("/sys/bus/pci/devices/%s", pfPciAddress)
+	pfPath := buildSysBusPciPath(pfPciAddress, "")
 	entries, err := os.ReadDir(pfPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read PF directory: %v", err)
@@ -138,7 +188,7 @@ func (h *Host) GetVFList(pfPciAddress string) ([]VFInfo, error) {
 			vfAddr := filepath.Base(target)
 
 			// Read VF device ID from sysfs
-			deviceIDPath := fmt.Sprintf("/sys/bus/pci/devices/%s/device", vfAddr)
+			deviceIDPath := buildSysBusPciPath(vfAddr, "device")
 			deviceIDBytes, err := os.ReadFile(deviceIDPath)
 			vfDeviceID := ""
 			if err != nil {
@@ -169,7 +219,7 @@ func (h *Host) PCI() (*ghw.PCIInfo, error) {
 
 // TryGetInterfaceName tries to find the network interface name based on PCI address
 func (h *Host) TryGetInterfaceName(pciAddr string) string {
-	netDir := filepath.Join(consts.SysBusPci, pciAddr, "net")
+	netDir := buildSysBusPciPath(pciAddr, "net")
 	if _, err := os.Lstat(netDir); err != nil {
 		return ""
 	}
@@ -189,7 +239,7 @@ func (h *Host) TryGetInterfaceName(pciAddr string) string {
 
 // GetNicSriovMode returns the interface mode (simplified implementation)
 // This is a simplified version that returns "legacy" mode as fallback
-func (h *Host) GetNicSriovMode(pciAddr string) string {
+func (h *Host) GetNicSriovMode(_ string) string {
 	// For simplicity, always return legacy mode
 	// A full implementation would use netlink to query the eswitch mode
 	return "legacy"
@@ -197,7 +247,7 @@ func (h *Host) GetNicSriovMode(pciAddr string) string {
 
 // GetNumaNode returns the NUMA node for a given PCI device
 func (h *Host) GetNumaNode(pciAddress string) (string, error) {
-	numaNodePath := fmt.Sprintf("/sys/bus/pci/devices/%s/numa_node", pciAddress)
+	numaNodePath := buildSysBusPciPath(pciAddress, "numa_node")
 	content, err := os.ReadFile(numaNodePath)
 	if err != nil {
 		// If numa_node file doesn't exist, return "0" as default
@@ -232,7 +282,7 @@ func (h *Host) GetParentPciAddress(pciAddress string) (string, error) {
 	// at bus 00 or look for the immediate parent in the PCI hierarchy
 
 	// First, try to get parent from sysfs
-	parentPath := fmt.Sprintf("/sys/bus/pci/devices/%s/../", pciAddress)
+	parentPath := buildSysBusPciPath(pciAddress, "../")
 	parentDir, err := filepath.EvalSymlinks(parentPath)
 	if err == nil {
 		parentAddr := filepath.Base(parentDir)
@@ -248,7 +298,7 @@ func (h *Host) GetParentPciAddress(pciAddress string) (string, error) {
 	if len(deviceParts) == 2 {
 		// Try to find a bridge on bus 00
 		parentAddr := fmt.Sprintf("%s:00:00.0", domain)
-		parentDevPath := fmt.Sprintf("/sys/bus/pci/devices/%s", parentAddr)
+		parentDevPath := buildSysBusPciPath(parentAddr, "")
 		if _, err := os.Stat(parentDevPath); err == nil {
 			return parentAddr, nil
 		}
@@ -381,7 +431,7 @@ func (h *Host) UnbindDriverByBusAndDevice(device string) error {
 
 // GetDriverByBusAndDevice returns driver for device on the bus
 func (h *Host) GetDriverByBusAndDevice(device string) (string, error) {
-	driverLink := filepath.Join(consts.SysBusPci, device, "driver")
+	driverLink := buildSysBusPciPath(device, "driver")
 	driverInfo, err := os.Readlink(driverLink)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -400,7 +450,7 @@ func (h *Host) GetDriverByBusAndDevice(device string) (string, error) {
 // bindDriver binds device to the provided driver
 func (h *Host) bindDriver(device, driver string) error {
 	klog.V(2).Info("bindDriver(): bind to driver", "device", device, "driver", driver)
-	bindPath := filepath.Join("/sys/bus/pci/drivers", driver, "bind")
+	bindPath := buildSysBusPciDriverPath(driver, "bind")
 	err := os.WriteFile(bindPath, []byte(device), os.ModeAppend)
 	if err != nil {
 		klog.Error(err, "bindDriver(): failed to bind driver", "device", device, "driver", driver)
@@ -412,7 +462,7 @@ func (h *Host) bindDriver(device, driver string) error {
 // unbindDriver unbinds device from the driver
 func (h *Host) unbindDriver(device, driver string) error {
 	klog.V(2).Info("unbindDriver(): unbind from driver", "device", device, "driver", driver)
-	unbindPath := filepath.Join("/sys/bus/pci/drivers", driver, "unbind")
+	unbindPath := buildSysBusPciDriverPath(driver, "unbind")
 	err := os.WriteFile(unbindPath, []byte(device), os.ModeAppend)
 	if err != nil {
 		klog.Error(err, "unbindDriver(): failed to unbind driver", "device", device, "driver", driver)
@@ -424,7 +474,7 @@ func (h *Host) unbindDriver(device, driver string) error {
 // probeDriver probes driver for device on the bus
 func (h *Host) probeDriver(device string) error {
 	klog.V(2).Info("probeDriver(): drivers probe", "device", device)
-	probePath := filepath.Join("/sys/bus/pci/drivers_probe")
+	probePath := buildSysPath("/sys/bus/pci/drivers_probe")
 	err := os.WriteFile(probePath, []byte(device), os.ModeAppend)
 	if err != nil {
 		klog.Error(err, "probeDriver(): failed to trigger driver probe", "device", device)
@@ -437,7 +487,7 @@ func (h *Host) probeDriver(device string) error {
 // resets override if override arg is "",
 // if device doesn't support overriding (has no driver_override path), does nothing
 func (h *Host) setDriverOverride(device, override string) error {
-	driverOverridePath := filepath.Join("/sys/bus/pci/devices", device, "driver_override")
+	driverOverridePath := buildSysBusPciPath(device, "driver_override")
 	if _, err := os.Stat(driverOverridePath); err != nil {
 		if os.IsNotExist(err) {
 			klog.V(2).Info("setDriverOverride(): device doesn't support driver override, skip", "device", device)
@@ -482,7 +532,7 @@ func (h *Host) GetVFIODeviceFile(pciAddress string) (devFileHost, devFileContain
 	const devDir = "/dev"
 
 	// Get iommu group for this device
-	devPath := filepath.Join(consts.SysBusPci, pciAddress)
+	devPath := buildSysBusPciPath(pciAddress, "")
 	_, err = os.Lstat(devPath)
 	if err != nil {
 		err = fmt.Errorf("GetVFIODeviceFile(): Could not get directory information for device: %s, Err: %v", pciAddress, err)
@@ -533,7 +583,7 @@ func (h *Host) GetVFIODeviceFile(pciAddress string) (devFileHost, devFileContain
 // IsKernelModuleLoaded checks if a kernel module is currently loaded
 func (h *Host) IsKernelModuleLoaded(moduleName string) bool {
 	// Read /proc/modules to check if the module is loaded
-	content, err := os.ReadFile("/proc/modules")
+	content, err := os.ReadFile(buildProcPath("/proc/modules"))
 	if err != nil {
 		klog.Error(err, "IsKernelModuleLoaded(): failed to read /proc/modules")
 		return false

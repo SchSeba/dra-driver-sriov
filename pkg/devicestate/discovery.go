@@ -32,7 +32,7 @@ func DiscoverSriovDevices() (types.AllocatableDevices, error) {
 
 	logger.Info("Starting SR-IOV device discovery")
 
-	pci, err := host.Helpers.PCI()
+	pci, err := host.GetHelpers().PCI()
 	if err != nil {
 		logger.Error(err, "Failed to get PCI info")
 		return nil, fmt.Errorf("error getting PCI info: %v", err)
@@ -61,28 +61,28 @@ func DiscoverSriovDevices() (types.AllocatableDevices, error) {
 		}
 
 		// TODO: exclude devices used by host system
-		if host.Helpers.IsSriovVF(device.Address) {
+		if host.GetHelpers().IsSriovVF(device.Address) {
 			logger.V(2).Info("Skipping VF device", "address", device.Address)
 			continue
 		}
 
-		pfNetName := host.Helpers.TryGetInterfaceName(device.Address)
+		pfNetName := host.GetHelpers().TryGetInterfaceName(device.Address)
 		if pfNetName == "" {
 			logger.Error(nil, "Unable to get interface name for device, skipping", "address", device.Address)
 			continue
 		}
 
-		eswitchMode := host.Helpers.GetNicSriovMode(device.Address)
+		eswitchMode := host.GetHelpers().GetNicSriovMode(device.Address)
 
 		// Get NUMA node information
-		numaNode, err := host.Helpers.GetNumaNode(device.Address)
+		numaNode, err := host.GetHelpers().GetNumaNode(device.Address)
 		if err != nil {
 			logger.Error(err, "Failed to get NUMA node, using default", "address", device.Address)
 			numaNode = "0" // Default to node 0 if we can't determine it
 		}
 
 		// Get parent PCI address information
-		parentPciAddress, err := host.Helpers.GetParentPciAddress(device.Address)
+		parentPciAddress, err := host.GetHelpers().GetParentPciAddress(device.Address)
 		if err != nil {
 			logger.Error(err, "Failed to get parent PCI address", "address", device.Address)
 			parentPciAddress = "" // Leave empty if we can't determine it
@@ -114,7 +114,7 @@ func DiscoverSriovDevices() (types.AllocatableDevices, error) {
 	for _, pfInfo := range pfList {
 		logger.V(1).Info("Getting VF list for PF", "pf", pfInfo.NetName, "address", pfInfo.Address)
 
-		vfList, err := host.Helpers.GetVFList(pfInfo.Address)
+		vfList, err := host.GetHelpers().GetVFList(pfInfo.Address)
 		if err != nil {
 			logger.Error(err, "Failed to get VF list for PF", "pf", pfInfo.NetName, "address", pfInfo.Address)
 			return nil, fmt.Errorf("error getting VF list: %v", err)

@@ -16,13 +16,10 @@
 CONTAINER_TOOL ?= docker
 MKDIR ?= mkdir
 DISTRIBUTIONS := centos9
-DOCKERFILE := $(CURDIR)/deployments/container/Dockerfile
+DOCKERFILE := $(CURDIR)/Dockerfile
 GOARCH ?= amd64
 
-include $(CURDIR)/common.mk
-
-IMAGE_TAG := $(VERSION)
-IMAGE = $(IMAGE_NAME):$(IMAGE_TAG)
+include $(CURDIR)/../../common.mk
 
 ##### Public rules #####
 .PHONY: $(DISTRIBUTIONS)
@@ -33,13 +30,13 @@ centos9: BASE_IMAGE = quay.io/centos/centos:stream9
 $(DISTRIBUTIONS):
 	DOCKER_BUILDKIT=1 \
 		$(CONTAINER_TOOL) build --pull \
-		--tag $(IMAGE) \
+		--tag $(IMAGE_NAME):$(VERSION) \
 		--build-arg GOLANG_VERSION="$(GOLANG_VERSION)" \
 		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg GOARCH="$(GOARCH)" \
 		-f $(DOCKERFILE) \
-		$(CURDIR)
+		$(CURDIR)/../..
 
 push:
-	$(CONTAINER_TOOL) push $(IMAGE)
+	$(CONTAINER_TOOL) push $(IMAGE_NAME):$(VERSION)

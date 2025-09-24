@@ -24,21 +24,21 @@ import (
 	cdispec "tags.cncf.io/container-device-interface/specs-go"
 )
 
-type DeviceStateManager struct {
+type Manager struct {
 	k8sClient              flags.ClientSets
-	cdi                    *cdi.CDIHandler
+	cdi                    *cdi.Handler
 	defaultInterfacePrefix string
 	allocatable            drasriovtypes.AllocatableDevices
 	republishCallback      func(context.Context) error
 }
 
-func NewDeviceStateManager(config *drasriovtypes.Config, cdi *cdi.CDIHandler) (*DeviceStateManager, error) {
+func NewManager(config *drasriovtypes.Config, cdi *cdi.Handler) (*Manager, error) {
 	allocatable, err := DiscoverSriovDevices()
 	if err != nil {
 		return nil, fmt.Errorf("error enumerating all possible devices: %v", err)
 	}
 
-	state := &DeviceStateManager{
+	state := &Manager{
 		k8sClient:              config.K8sClient,
 		defaultInterfacePrefix: config.Flags.DefaultInterfacePrefix,
 		cdi:                    cdi,
@@ -49,18 +49,18 @@ func NewDeviceStateManager(config *drasriovtypes.Config, cdi *cdi.CDIHandler) (*
 }
 
 // GetAllocatableDevices returns the allocatable devices
-func (s *DeviceStateManager) GetAllocatableDevices() drasriovtypes.AllocatableDevices {
+func (s *Manager) GetAllocatableDevices() drasriovtypes.AllocatableDevices {
 	return s.allocatable
 }
 
-func (s *DeviceStateManager) GetAllocatedDeviceByDeviceName(deviceName string) (resourceapi.Device, bool) {
+func (s *Manager) GetAllocatedDeviceByDeviceName(deviceName string) (resourceapi.Device, bool) {
 	device, exist := s.allocatable[deviceName]
 	return device, exist
 }
 
 // PrepareDevicesForClaim prepares the devices for a given claim
 // It will return the prepared devices for the claim
-func (s *DeviceStateManager) PrepareDevicesForClaim(ctx context.Context, ifNameIndex *int, claim *resourceapi.ResourceClaim) (drasriovtypes.PreparedDevices, error) {
+func (s *Manager) PrepareDevicesForClaim(ctx context.Context, ifNameIndex *int, claim *resourceapi.ResourceClaim) (drasriovtypes.PreparedDevices, error) {
 	logger := klog.FromContext(ctx).WithName("PrepareDevicesForClaim")
 
 	resultsConfig, err := getMapOfOpaqueDeviceConfigForDevice(configapi.Decoder, claim.Status.Allocation.Devices.Config)
@@ -86,10 +86,9 @@ func (s *DeviceStateManager) PrepareDevicesForClaim(ctx context.Context, ifNameI
 	return preparedDevices, nil
 }
 
-func (s *DeviceStateManager) prepareDevices(ctx context.Context, ifNameIndex *int,
+func (s *Manager) prepareDevices(ctx context.Context, ifNameIndex *int,
 	claim *resourceapi.ResourceClaim,
 	resultsConfig map[string]*configapi.VfConfig) (drasriovtypes.PreparedDevices, error) {
-
 	logger := klog.FromContext(ctx).WithName("prepareDevices")
 	preparedDevices := drasriovtypes.PreparedDevices{}
 	for _, result := range claim.Status.Allocation.Devices.Results {
@@ -126,7 +125,7 @@ func (s *DeviceStateManager) prepareDevices(ctx context.Context, ifNameIndex *in
 	return preparedDevices, nil
 }
 
-func (s *DeviceStateManager) applyConfigOnDevice(ctx context.Context, ifNameIndex *int, claim *resourceapi.ResourceClaim, config *configapi.VfConfig, result *resourceapi.DeviceRequestAllocationResult) (*drasriovtypes.PreparedDevice, error) {
+func (s *Manager) applyConfigOnDevice(ctx context.Context, ifNameIndex *int, claim *resourceapi.ResourceClaim, config *configapi.VfConfig, result *resourceapi.DeviceRequestAllocationResult) (*drasriovtypes.PreparedDevice, error) {
 	logger := klog.FromContext(ctx).WithName("applyConfigOnDevice")
 	logger.V(3).Info("Applying config on device", "config", config, "result", result)
 	deviceInfo, exist := s.allocatable[result.Device]
@@ -150,14 +149,14 @@ func (s *DeviceStateManager) applyConfigOnDevice(ctx context.Context, ifNameInde
 		return nil, fmt.Errorf("error converting net attach def config to sriov-cni format: %w", err)
 	}
 	// Bind device to driver if specified in config
-	originalDriver, err := host.Helpers.BindDeviceDriver(pciAddress, config)
+	originalDriver, err := host.GetHelpers().BindDeviceDriver(pciAddress, config)
 	if err != nil {
 		return nil, fmt.Errorf("error binding device %s to driver: %w", pciAddress, err)
 	}
 
 	// Ensure that the kernel module are loaded if the user request vhost mounts
 	if config.AddVhostMount {
-		if err := host.Helpers.EnsureVhostModulesLoaded(); err != nil {
+		if err := host.GetHelpers().EnsureVhostModulesLoaded(); err != nil {
 			return nil, fmt.Errorf("failed to ensure vhost modules are loaded: %w", err)
 		}
 	}
@@ -173,7 +172,7 @@ func (s *DeviceStateManager) applyConfigOnDevice(ctx context.Context, ifNameInde
 
 	// If device is bound to vfio-pci, add VFIO device nodes
 	if config.Driver == "vfio-pci" {
-		devFileHost, devFileContainer, err := host.Helpers.GetVFIODeviceFile(pciAddress)
+		devFileHost, devFileContainer, err := host.GetHelpers().GetVFIODeviceFile(pciAddress)
 		if err != nil {
 			return nil, fmt.Errorf("error getting VFIO device file for device %s: %w", pciAddress, err)
 		}
@@ -250,7 +249,7 @@ func (s *DeviceStateManager) applyConfigOnDevice(ctx context.Context, ifNameInde
 	return preparedDevice, nil
 }
 
-func (s *DeviceStateManager) getNetAttachDefRawConfig(ctx context.Context, namespace string, netAttachDefName string) (string, error) {
+func (s *Manager) getNetAttachDefRawConfig(ctx context.Context, namespace string, netAttachDefName string) (string, error) {
 	// Get the net attach def information
 	netAttachDef := &netattdefv1.NetworkAttachmentDefinition{}
 	err := s.k8sClient.Get(ctx, client.ObjectKey{
@@ -263,7 +262,7 @@ func (s *DeviceStateManager) getNetAttachDefRawConfig(ctx context.Context, names
 	return netAttachDef.Spec.Config, nil
 }
 
-func (s *DeviceStateManager) Unprepare(claimUID string, preparedDevices drasriovtypes.PreparedDevices) error {
+func (s *Manager) Unprepare(claimUID string, preparedDevices drasriovtypes.PreparedDevices) error {
 	if err := s.unprepareDevices(preparedDevices); err != nil {
 		return fmt.Errorf("unprepare failed: %v", err)
 	}
@@ -282,11 +281,11 @@ func (s *DeviceStateManager) Unprepare(claimUID string, preparedDevices drasriov
 }
 
 // unprepareDevices reverts the driver configuration for the prepared devices
-func (s *DeviceStateManager) unprepareDevices(preparedDevices drasriovtypes.PreparedDevices) error {
+func (s *Manager) unprepareDevices(preparedDevices drasriovtypes.PreparedDevices) error {
 	for _, preparedDevice := range preparedDevices {
 		// Restore original driver if a driver change was made
 		if preparedDevice.Config.Driver != "" {
-			if err := host.Helpers.RestoreDeviceDriver(preparedDevice.PciAddress, preparedDevice.OriginalDriver); err != nil {
+			if err := host.GetHelpers().RestoreDeviceDriver(preparedDevice.PciAddress, preparedDevice.OriginalDriver); err != nil {
 				klog.Error(err, "Failed to restore original driver for device", "device", preparedDevice.PciAddress, "originalDriver", preparedDevice.OriginalDriver)
 				return fmt.Errorf("failed to restore original driver for device %s: %w", preparedDevice.PciAddress, err)
 			}
@@ -298,7 +297,7 @@ func (s *DeviceStateManager) unprepareDevices(preparedDevices drasriovtypes.Prep
 
 // UpdateDeviceResourceNames updates the resource names for devices and triggers a republish
 // deviceResourceMap is a map of device name to resource name. Empty resource name removes the attribute.
-func (s *DeviceStateManager) UpdateDeviceResourceNames(ctx context.Context, deviceResourceMap map[string]string) error {
+func (s *Manager) UpdateDeviceResourceNames(ctx context.Context, deviceResourceMap map[string]string) error {
 	logger := klog.FromContext(ctx).WithName("UpdateDeviceResourceNames")
 	logger.V(2).Info("Updating device resource names", "deviceCount", len(deviceResourceMap))
 
@@ -318,7 +317,6 @@ func (s *DeviceStateManager) UpdateDeviceResourceNames(ctx context.Context, devi
 				// Check if attribute already exists with the same value
 				if existingAttr, exists := device.Attributes[consts.AttributeResourceName]; !exists ||
 					existingAttr.StringValue == nil || *existingAttr.StringValue != resourceName {
-
 					device.Attributes[consts.AttributeResourceName] = resourceapi.DeviceAttribute{
 						StringValue: &resourceName,
 					}
@@ -373,6 +371,6 @@ func (s *DeviceStateManager) UpdateDeviceResourceNames(ctx context.Context, devi
 }
 
 // SetRepublishCallback sets the callback function to trigger resource republishing
-func (s *DeviceStateManager) SetRepublishCallback(callback func(context.Context) error) {
+func (s *Manager) SetRepublishCallback(callback func(context.Context) error) {
 	s.republishCallback = callback
 }
