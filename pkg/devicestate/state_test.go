@@ -1141,6 +1141,68 @@ var _ = Describe("Manager", Serial, func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to republish resources"))
 		})
+
+		It("should skip reserved discovery attributes and still apply non-reserved ones", func() {
+			s := &Manager{
+				allocatable: map[string]resourceapi.Device{
+					"devA": {Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+						consts.AttributeVendorID:   {StringValue: ptr.To("8086")},
+						consts.AttributePciAddress: {StringValue: ptr.To("0000:03:00.0")},
+					}},
+				},
+			}
+
+			policyDevices := map[string]map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+				"devA": {
+					// Reserved — should be skipped
+					consts.AttributeVendorID:   {StringValue: ptr.To("EVIL")},
+					consts.AttributePciAddress: {StringValue: ptr.To("FAKE")},
+					// Non-reserved — should be applied
+					consts.AttributeResourceName: {StringValue: ptr.To("myResource")},
+				},
+			}
+			err := s.UpdatePolicyDevices(context.Background(), policyDevices)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Discovery attributes must remain unchanged
+			Expect(*s.allocatable["devA"].Attributes[consts.AttributeVendorID].StringValue).To(Equal("8086"))
+			Expect(*s.allocatable["devA"].Attributes[consts.AttributePciAddress].StringValue).To(Equal("0000:03:00.0"))
+
+			// Non-reserved attribute should be applied
+			Expect(*s.allocatable["devA"].Attributes[consts.AttributeResourceName].StringValue).To(Equal("myResource"))
+
+			// Only the non-reserved key should be tracked in policyAttrKeys
+			Expect(s.policyAttrKeys["devA"]).To(HaveKey(resourceapi.QualifiedName(consts.AttributeResourceName)))
+			Expect(s.policyAttrKeys["devA"]).ToNot(HaveKey(resourceapi.QualifiedName(consts.AttributeVendorID)))
+			Expect(s.policyAttrKeys["devA"]).ToNot(HaveKey(resourceapi.QualifiedName(consts.AttributePciAddress)))
+		})
+
+		It("should skip all policy attributes if every key is reserved", func() {
+			s := &Manager{
+				allocatable: map[string]resourceapi.Device{
+					"devA": {Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+						consts.AttributeVendorID: {StringValue: ptr.To("8086")},
+						consts.AttributeVFID:     {IntValue: ptr.To(int64(3))},
+					}},
+				},
+			}
+
+			policyDevices := map[string]map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+				"devA": {
+					consts.AttributeVendorID: {StringValue: ptr.To("EVIL")},
+					consts.AttributeVFID:     {IntValue: ptr.To(int64(999))},
+				},
+			}
+			err := s.UpdatePolicyDevices(context.Background(), policyDevices)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Discovery attributes must remain unchanged
+			Expect(*s.allocatable["devA"].Attributes[consts.AttributeVendorID].StringValue).To(Equal("8086"))
+			Expect(*s.allocatable["devA"].Attributes[consts.AttributeVFID].IntValue).To(Equal(int64(3)))
+
+			// policyAttrKeys should have an empty set for devA (device is still advertised, but no policy attrs)
+			Expect(s.policyAttrKeys["devA"]).To(BeEmpty())
+		})
 	})
 
 	Context("RDMA Device Preparation", func() {
