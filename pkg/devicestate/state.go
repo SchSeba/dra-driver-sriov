@@ -573,6 +573,12 @@ func (s *Manager) UpdatePolicyDevices(ctx context.Context, policyDevices map[str
 		// Track new policy attribute keys for this device
 		newKeys := make(map[resourceapi.QualifiedName]bool, len(attrs))
 		for key, val := range attrs {
+			// Protect built-in discovery attributes from override
+			if consts.ReservedAttributes[key] {
+				logger.Info("WARNING: skipping policy attribute that collides with a built-in discovery attribute",
+					"deviceName", deviceName, "key", key)
+				continue
+			}
 			newKeys[key] = true
 			if existing, ok := device.Attributes[key]; !ok || !deviceAttributeEqual(existing, val) {
 				device.Attributes[key] = val

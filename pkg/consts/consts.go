@@ -77,6 +77,26 @@ var (
 	AttributePCIeRoot resourceapi.QualifiedName = deviceattribute.StandardDeviceAttributePCIeRoot
 )
 
+// ReservedAttributes is the set of attribute keys populated by driver discovery
+// (DiscoverSriovDevices). Policy-defined DeviceAttributes must NOT override these
+// keys — any attempt will be silently skipped with a warning log.
+var ReservedAttributes = map[resourceapi.QualifiedName]bool{
+	AttributeVendorID:           true,
+	AttributeDeviceID:           true,
+	AttributePFDeviceID:         true,
+	AttributePciAddress:         true,
+	AttributeMultusDeviceID:     true,
+	AttributePFName:             true,
+	AttributeEswitchMode:        true,
+	AttributeVFID:               true,
+	AttributePCIeRoot:           true,
+	AttributePfPciAddress:       true,
+	AttributeStandardPciAddress: true,
+	AttributeLinkType:           true,
+	AttributeRDMACapable:        true,
+	AttributeNUMANode:           true,
+}
+
 type ConfigurationMode string
 
 const (

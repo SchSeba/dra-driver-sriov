@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/dynamic-resource-allocation/deviceattribute"
 
@@ -64,6 +65,39 @@ var _ = Describe("Consts", func() {
 			Expect(consts.AttributeNUMANode).To(Equal(consts.DraNetCompatPrefix + "/numaNode"))
 			Expect(consts.AttributeMultusDeviceID).To(Equal(consts.MultusAttributePrefix + "/deviceID"))
 			Expect(consts.AttributeMultusResourceName).To(Equal(consts.MultusAttributePrefix + "/resourceName"))
+		})
+
+		It("should have correct reserved attributes protecting discovery keys", func() {
+			// ReservedAttributes must include every key set by DiscoverSriovDevices
+			expectedReserved := []string{
+				consts.AttributeVendorID,
+				consts.AttributeDeviceID,
+				consts.AttributePFDeviceID,
+				consts.AttributePciAddress,
+				consts.AttributeMultusDeviceID,
+				consts.AttributePFName,
+				consts.AttributeEswitchMode,
+				consts.AttributeVFID,
+				string(consts.AttributePCIeRoot),
+				consts.AttributePfPciAddress,
+				consts.AttributeStandardPciAddress,
+				consts.AttributeLinkType,
+				consts.AttributeRDMACapable,
+				consts.AttributeNUMANode,
+			}
+
+			Expect(consts.ReservedAttributes).To(HaveLen(len(expectedReserved)))
+			for _, key := range expectedReserved {
+				Expect(consts.ReservedAttributes).To(HaveKey(resourceapi.QualifiedName(key)),
+					"expected %q to be a reserved attribute", key)
+			}
+		})
+
+		It("should not include policy-settable attributes in reserved set", func() {
+			// These attributes are NOT set by discovery and should be settable by policy
+			Expect(consts.ReservedAttributes).ToNot(HaveKey(resourceapi.QualifiedName(consts.AttributeResourceName)))
+			Expect(consts.ReservedAttributes).ToNot(HaveKey(resourceapi.QualifiedName(consts.AttributeMultusResourceName)))
+			Expect(consts.ReservedAttributes).ToNot(HaveKey(resourceapi.QualifiedName(consts.AttributeInterfaceName)))
 		})
 
 		It("should have correct network device constants", func() {
