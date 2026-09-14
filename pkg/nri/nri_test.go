@@ -646,4 +646,74 @@ var _ = Describe("NRI updateNetworkDeviceData ordering", func() {
 		Expect(updatedPreparedDevices[0].NetworkDeviceData).NotTo(BeNil())
 		Expect(updatedPreparedDevices[0].NetworkDeviceData.InterfaceName).To(Equal("net1"))
 	})
+
+	It("skips a claim that was recreated under the same name", func() {
+		cfg := &types.Config{
+			Flags: &types.Flags{
+				KubeletPluginsDirectoryPath: GinkgoT().TempDir(),
+			},
+		}
+		pm, err := podmanager.NewPodManager(cfg)
+		Expect(err).NotTo(HaveOccurred())
+
+		preparedFor := k8stypes.UID("claim-a-uid")
+		podUID := k8stypes.UID("pod-a-uid")
+		prepared := types.PreparedDevices{
+			{
+				ClaimNamespacedName: kubeletplugin.NamespacedObject{
+					NamespacedName: k8stypes.NamespacedName{
+						Namespace: "default",
+						Name:      "claim-a",
+					},
+					UID: preparedFor,
+				},
+				Device: drapbv1.Device{
+					PoolName:   "pool-a",
+					DeviceName: "dev-a",
+				},
+			},
+		}
+		Expect(pm.Set(podUID, preparedFor, prepared)).To(Succeed())
+
+		// Same name, different object: the claim these devices were prepared for
+		// is gone and this one belongs to whoever recreated it.
+		replacement := &resourceapi.ResourceClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "claim-a",
+				Namespace: "default",
+				UID:       k8stypes.UID("claim-a-uid-2"),
+			},
+			Status: resourceapi.ResourceClaimStatus{
+				Devices: []resourceapi.AllocatedDeviceStatus{
+					{
+						Driver: consts.DriverName,
+						Pool:   "pool-a",
+						Device: "dev-a",
+					},
+				},
+			},
+		}
+
+		plugin := &Plugin{
+			podManager: pm,
+			k8sClient: flags.ClientSets{
+				Interface: k8sfake.NewSimpleClientset(replacement.DeepCopy()),
+				Client:    ctrlclientfake.NewClientBuilder().WithScheme(flags.Scheme).WithRuntimeObjects(replacement.DeepCopy()).Build(),
+			},
+		}
+
+		networkDataList := types.NetworkDataChanStructList{
+			{
+				PreparedDevice:    prepared[0],
+				NetworkDeviceData: &resourceapi.NetworkDeviceData{InterfaceName: "net1"},
+			},
+		}
+
+		plugin.updateNetworkDeviceData(context.Background(), networkDataList)
+
+		got, err := plugin.k8sClient.ResourceV1().ResourceClaims("default").Get(context.Background(), "claim-a", metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status.Devices).To(HaveLen(1))
+		Expect(got.Status.Devices[0].NetworkData).To(BeNil(), "the replacement claim must not take the old claim's network data")
+	})
 })
