@@ -477,7 +477,7 @@ var _ = Describe("Manager", Serial, func() {
 
 			mockHost.EXPECT().BindDeviceDriver("0000:01:00.1", gomock.Any()).Return("ixgbevf", nil)
 			mockHost.EXPECT().GetVFIODeviceFile("0000:01:00.1").Return("/dev/vfio/1", "/dev/vfio/1", nil)
-			mockHost.EXPECT().GetVFIOCdevPath("0000:01:00.1").Return("", nil)
+			// iommuAvailable is false (zero value), so GetVFIOCdevPath is not probed for.
 			mockHost.EXPECT().GetRDMADevicesForPCI("0000:01:00.1").Return([]string{})
 			mockHost.EXPECT().RestoreDeviceDriver("0000:01:00.1", "ixgbevf").Return(fmt.Errorf("restore failed"))
 
@@ -952,7 +952,7 @@ var _ = Describe("Manager", Serial, func() {
 		})
 
 		DescribeTable("iommufd CDI device nodes",
-			func(iommuAvailable bool, cdevReturn string, expectCdev, expectIommu bool) {
+			func(iommuAvailable bool, cdevReturn string, expectCdevCall, expectCdev, expectIommu bool) {
 				m := &Manager{
 					allocatable: drasriovtypes.AllocatableDevices{
 						"device1": {
@@ -988,7 +988,12 @@ var _ = Describe("Manager", Serial, func() {
 
 				mockHost.EXPECT().BindDeviceDriver("0000:01:00.1", config).Return("ixgbevf", nil)
 				mockHost.EXPECT().GetVFIODeviceFile("0000:01:00.1").Return("/dev/vfio/1", "/dev/vfio/1", nil)
-				mockHost.EXPECT().GetVFIOCdevPath("0000:01:00.1").Return(cdevReturn, nil)
+				// GetVFIOCdevPath is only consulted when iommuAvailable is true: the cdev
+				// is not useful to a workload without /dev/iommu, so it is not even
+				// probed for otherwise.
+				if expectCdevCall {
+					mockHost.EXPECT().GetVFIOCdevPath("0000:01:00.1").Return(cdevReturn, nil)
+				}
 
 				ifNameIndex := 0
 				preparedDevice, err := m.applyConfigOnDevice(context.Background(), &ifNameIndex, claim, config, result)
@@ -1000,6 +1005,8 @@ var _ = Describe("Manager", Serial, func() {
 				for _, dev := range edits.DeviceNodes {
 					devicePaths = append(devicePaths, dev.Path)
 				}
+				// Legacy VFIO group nodes are unconditional: they coexist alongside the
+				// iommufd cdev/iommu nodes whenever the latter are present.
 				Expect(devicePaths).To(ContainElement("/dev/vfio/1"))
 				Expect(devicePaths).To(ContainElement("/dev/vfio/vfio"))
 				if expectCdev {
@@ -1013,10 +1020,9 @@ var _ = Describe("Manager", Serial, func() {
 					Expect(devicePaths).NotTo(ContainElement("/dev/iommu"))
 				}
 			},
-			Entry("both available", true, "/dev/vfio/devices/vfio0", true, true),
-			Entry("neither available", false, "", false, false),
-			Entry("cdev only", false, "/dev/vfio/devices/vfio0", true, false),
-			Entry("iommu only", true, "", false, true),
+			Entry("iommu and cdev both available: cdev, /dev/iommu, and legacy vfio all present together", true, "/dev/vfio/devices/vfio0", true, true, true),
+			Entry("iommu unavailable: cdev is never probed for, only legacy vfio present", false, "", false, false, false),
+			Entry("iommu available but cdev not found (legacy kernel without vfio-dev sysfs entry): only /dev/iommu and legacy vfio present", true, "", true, false, true),
 		)
 
 		It("restores the original driver when VFIO cdev lookup fails", func() {
@@ -1030,6 +1036,7 @@ var _ = Describe("Manager", Serial, func() {
 					},
 				},
 				configurationMode: string(consts.ConfigurationModeMultus),
+				iommuAvailable:    true,
 			}
 			config := &configapi.VfConfig{
 				Driver: "vfio-pci",

@@ -306,21 +306,24 @@ func (s *Manager) applyConfigOnDevice(ctx context.Context, ifNameIndex *int, cla
 			Type:     "c", // character device
 		})
 
-		// Add VFIO cdev device node for iommufd-capable kernels
-		cdevPath, err := host.GetHelpers().GetVFIOCdevPath(pciAddress)
-		if err != nil {
-			return nil, restoreDriverOnError(fmt.Errorf("error getting VFIO cdev for device %s: %w", pciAddress, err))
-		}
-		if cdevPath != "" {
-			deviceNodes = append(deviceNodes, &cdispec.DeviceNode{
-				Path:     cdevPath,
-				HostPath: cdevPath,
-				Type:     "c",
-			})
-		}
-
-		// Add /dev/iommu for iommufd support (node-level, cached at init)
+		// Add VFIO cdev device node and /dev/iommu for iommufd-capable kernels.
+		// The cdev is only useful to a workload when /dev/iommu is also present,
+		// so both are gated on iommuAvailable, which is checked once at driver
+		// startup (its value only changes on host reboot, not per allocation).
+		var cdevPath string
 		if s.iommuAvailable {
+			cdevPath, err = host.GetHelpers().GetVFIOCdevPath(pciAddress)
+			if err != nil {
+				return nil, restoreDriverOnError(fmt.Errorf("error getting VFIO cdev for device %s: %w", pciAddress, err))
+			}
+			if cdevPath != "" {
+				deviceNodes = append(deviceNodes, &cdispec.DeviceNode{
+					Path:     cdevPath,
+					HostPath: cdevPath,
+					Type:     "c",
+				})
+			}
+
 			deviceNodes = append(deviceNodes, &cdispec.DeviceNode{
 				Path:     "/dev/iommu",
 				HostPath: "/dev/iommu",
