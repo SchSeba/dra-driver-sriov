@@ -42,6 +42,7 @@ type Manager struct {
 	// device key also indicates that the device is advertised (policy-matched).
 	policyAttrKeys    map[string]map[resourceapi.QualifiedName]bool
 	configurationMode string
+	iommuAvailable    bool
 }
 
 // NewManager creates a new device-state manager and initializes allocatable SR-IOV devices.
@@ -77,6 +78,7 @@ func NewManager(config *drasriovtypes.Config, cdi *cdi.Handler, deviceInfoStore 
 		deviceInfoStore:        deviceInfoStore,
 		allocatable:            allocatable,
 		configurationMode:      configurationMode,
+		iommuAvailable:         host.GetHelpers().IsIommufdAvailable(),
 	}
 
 	return state, nil
@@ -308,8 +310,35 @@ func (s *Manager) applyConfigOnDevice(ctx context.Context, ifNameIndex *int, cla
 			Type:     "c", // character device
 		})
 
+		// Add VFIO cdev device node and /dev/iommu for iommufd-capable kernels.
+		// The cdev is only useful to a workload when /dev/iommu is also present,
+		// so both are gated on iommuAvailable, which is checked once at driver
+		// startup (its value only changes on host reboot, not per allocation).
+		var cdevPath string
+		if s.iommuAvailable {
+			cdevPath, err = host.GetHelpers().GetVFIOCdevPath(pciAddress)
+			if err != nil {
+				return nil, restoreDriverOnError(fmt.Errorf("error getting VFIO cdev for device %s: %w", pciAddress, err))
+			}
+			if cdevPath != "" {
+				deviceNodes = append(deviceNodes, &cdispec.DeviceNode{
+					Path:     cdevPath,
+					HostPath: cdevPath,
+					Type:     "c",
+				})
+			}
+
+			deviceNodes = append(deviceNodes, &cdispec.DeviceNode{
+				Path:     "/dev/iommu",
+				HostPath: "/dev/iommu",
+				Type:     "c",
+			})
+		}
+
 		envs = append(envs, fmt.Sprintf("SRIOVNETWORK_%s_VFIO_DEVICE=%s", strings.ReplaceAll(result.Device, "-", "_"), devFileContainer))
-		logger.V(2).Info("Added VFIO device nodes for device", "device", pciAddress, "hostPath", devFileHost, "containerPath", devFileContainer)
+		logger.V(2).Info("Added VFIO device nodes for device", "device", pciAddress,
+			"hostPath", devFileHost, "containerPath", devFileContainer,
+			"cdevPath", cdevPath, "iommuAvailable", s.iommuAvailable)
 	}
 
 	// if addVhostMount is true, we add a volume mount for the vhost device
