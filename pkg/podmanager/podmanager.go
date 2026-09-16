@@ -73,15 +73,31 @@ func newPodManager(checkpointManager checkpointmanager.CheckpointManager) (*PodM
 
 // Set stores the configuration for all prepared devices under a given Pod UID.
 // If a configuration for the Pod UID or claim ID already exists, it will be overwritten.
+// When the checkpoint cannot be written the store is left as it was, so a
+// claim whose devices the caller then unprepares is not reported as prepared.
 func (s *PodManager) Set(podUID types.UID, claimID types.UID, preparedDevices drasriovtypes.PreparedDevices) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.preparedClaimsByPodUID[podUID]; !ok {
-		s.preparedClaimsByPodUID[podUID] = make(drasriovtypes.PreparedDevicesByClaimID)
+	claims, hadPod := s.preparedClaimsByPodUID[podUID]
+	if !hadPod {
+		claims = make(drasriovtypes.PreparedDevicesByClaimID)
+		s.preparedClaimsByPodUID[podUID] = claims
 	}
-	s.preparedClaimsByPodUID[podUID][claimID] = preparedDevices
+	previous, hadClaim := claims[claimID]
+	claims[claimID] = preparedDevices
 
-	return s.syncToCheckpoint()
+	if err := s.syncToCheckpoint(); err != nil {
+		switch {
+		case hadClaim:
+			claims[claimID] = previous
+		case hadPod:
+			delete(claims, claimID)
+		default:
+			delete(s.preparedClaimsByPodUID, podUID)
+		}
+		return err
+	}
+	return nil
 }
 
 // Get retrieves the configuration for a specific claim under a given Pod UID.
@@ -116,8 +132,15 @@ func (s *PodManager) GetDevicesByPodUID(podUID types.UID) (drasriovtypes.Prepare
 func (s *PodManager) DeletePod(podUID types.UID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	claims, found := s.preparedClaimsByPodUID[podUID]
 	delete(s.preparedClaimsByPodUID, podUID)
-	return s.syncToCheckpoint()
+	if err := s.syncToCheckpoint(); err != nil {
+		if found {
+			s.preparedClaimsByPodUID[podUID] = claims
+		}
+		return err
+	}
+	return nil
 }
 
 // GetByClaim retrieves the configuration for a specific claim.
@@ -136,7 +159,8 @@ func (s *PodManager) GetByClaim(claim kubeletplugin.NamespacedObject) (drasriovt
 }
 
 // UpdatePreparedDeviceNetworkData persists runtime network data on an already
-// tracked prepared device and syncs the checkpoint.
+// tracked prepared device and syncs the checkpoint. When the checkpoint cannot
+// be written the device keeps its previous network data.
 func (s *PodManager) UpdatePreparedDeviceNetworkData(preparedDevice *drasriovtypes.PreparedDevice, networkData *resourceapi.NetworkDeviceData) error {
 	if preparedDevice == nil {
 		return fmt.Errorf("prepared device is nil")
@@ -144,29 +168,36 @@ func (s *PodManager) UpdatePreparedDeviceNetworkData(preparedDevice *drasriovtyp
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	previous := preparedDevice.NetworkDeviceData
 	preparedDevice.SetNetworkDeviceData(networkData)
-	return s.syncToCheckpoint()
+	if err := s.syncToCheckpoint(); err != nil {
+		preparedDevice.NetworkDeviceData = previous
+		return err
+	}
+	return nil
 }
 
-// DeleteClaim removes all configurations associated with a given claim.
+// DeleteClaim removes the prepared devices of a claim. The pod's other claims
+// are kept, and the pod itself is removed once it has no claim left.
 // NOTE: for now we only support one pod per claim as VFs are not shared between pods
 func (s *PodManager) DeleteClaim(claim kubeletplugin.NamespacedObject) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	podsToDelete := []types.UID{}
-	for uid, preparedDevicesByClaimID := range s.preparedClaimsByPodUID {
-		_, found := preparedDevicesByClaimID[claim.UID]
-		if found {
-			podsToDelete = append(podsToDelete, uid)
-			break
+	for podUID, claims := range s.preparedClaimsByPodUID {
+		devices, found := claims[claim.UID]
+		if !found {
+			continue
 		}
-	}
-
-	if len(podsToDelete) > 0 {
-		for _, uid := range podsToDelete {
-			delete(s.preparedClaimsByPodUID, uid)
+		delete(claims, claim.UID)
+		if len(claims) == 0 {
+			delete(s.preparedClaimsByPodUID, podUID)
 		}
-		return s.syncToCheckpoint()
+		if err := s.syncToCheckpoint(); err != nil {
+			claims[claim.UID] = devices
+			s.preparedClaimsByPodUID[podUID] = claims
+			return err
+		}
+		return nil
 	}
 	return nil
 }

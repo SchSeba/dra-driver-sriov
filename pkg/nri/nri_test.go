@@ -590,6 +590,10 @@ var _ = Describe("NRI updateNetworkDeviceData ordering", func() {
 		Expect(updatedClaim.Status.Devices).To(HaveLen(1))
 		Expect(updatedClaim.Status.Devices[0].NetworkData).To(BeNil())
 		Expect(updatedClaim.Status.Devices[0].Data).To(BeNil())
+
+		stored, found := pm.Get(podUID, claimUID)
+		Expect(found).To(BeTrue())
+		Expect(stored[0].NetworkDeviceData).To(BeNil(), "the store must not hold what the checkpoint does not")
 	})
 
 	It("updates claim status after checkpoint persistence succeeds", func() {

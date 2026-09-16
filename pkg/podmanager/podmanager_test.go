@@ -382,9 +382,41 @@ var _ = Describe("PodManager", func() {
 			_, found = pm.GetByClaim(claim)
 			Expect(found).To(BeFalse())
 
-			// Verify entire pod was deleted (current implementation deletes whole pod)
+			// The pod had no other claim, so it is gone as well
 			_, found = pm.GetDevicesByPodUID(podUID)
 			Expect(found).To(BeFalse())
+		})
+
+		It("should keep the pod's other claims when deleting one claim", func() {
+			// The kubelet unprepares a pod's claims one at a time; deleting the
+			// whole pod on the first left the others unreachable, so they were
+			// never unprepared.
+			otherClaimUID := types.UID("test-claim-uid-other")
+			otherDevices := draTypes.PreparedDevices{{
+				Device:              drapbv1.Device{DeviceName: "test-device-3"},
+				ClaimNamespacedName: kubeletplugin.NamespacedObject{UID: otherClaimUID},
+				PciAddress:          "0000:01:00.2",
+			}}
+			Expect(pm.Set(podUID, otherClaimUID, otherDevices)).To(Succeed())
+
+			Expect(pm.DeleteClaim(kubeletplugin.NamespacedObject{UID: claimUID})).To(Succeed())
+
+			_, found := pm.Get(podUID, claimUID)
+			Expect(found).To(BeFalse())
+			remaining, found := pm.GetByClaim(kubeletplugin.NamespacedObject{UID: otherClaimUID})
+			Expect(found).To(BeTrue())
+			Expect(remaining).To(Equal(otherDevices))
+			podDevices, found := pm.GetDevicesByPodUID(podUID)
+			Expect(found).To(BeTrue())
+			Expect(podDevices).To(Equal(otherDevices))
+
+			// The checkpoint agrees with the store.
+			pm2, err := podmanager.NewPodManager(config)
+			Expect(err).NotTo(HaveOccurred())
+			_, found = pm2.Get(podUID, claimUID)
+			Expect(found).To(BeFalse())
+			_, found = pm2.Get(podUID, otherClaimUID)
+			Expect(found).To(BeTrue())
 		})
 
 		It("should handle deleting non-existent pod", func() {
