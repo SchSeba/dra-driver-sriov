@@ -28,7 +28,16 @@ func NewPodManager(config *drasriovtypes.Config) (*PodManager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to create checkpoint manager: %v", err)
 	}
+	return newPodManager(checkpointManager)
+}
 
+// NewPodManagerWithCheckpointManager constructs a PodManager using the given checkpoint
+// manager. It is intended for tests that need to simulate checkpoint persistence failures.
+func NewPodManagerWithCheckpointManager(checkpointManager checkpointmanager.CheckpointManager) (*PodManager, error) {
+	return newPodManager(checkpointManager)
+}
+
+func newPodManager(checkpointManager checkpointmanager.CheckpointManager) (*PodManager, error) {
 	checkpoints, err := checkpointManager.ListCheckpoints()
 	if err != nil {
 		return nil, fmt.Errorf("unable to list checkpoints: %v", err)

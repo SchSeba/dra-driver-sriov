@@ -268,6 +268,10 @@ delete-virtual-k8s-cluster:
 redeploy-dra-driver-virtual-cluster:
 	./hack/virtual-cluster-redeploy.sh
 
+.PHONY: install-fake-gpu-driver
+install-fake-gpu-driver:
+	./hack/install-dra-example-gpu-driver.sh
+
 # Workload e2e against an already-deployed cluster (requires KUBECONFIG).
 # Optional: E2E_LABEL_FILTER='!Multus && !Alignment' to skip Multus/alignment demos.
 E2E_LABEL_FILTER ?=

@@ -28,9 +28,13 @@ Deploy a kcli-based virtual Kubernetes cluster with SR-IOV VFs and the DRA drive
 
 Environment:
   NUM_OF_WORKERS     Worker count (default: 2; use 0 or --single-node for single-node).
-  DRA_DRIVER_MODE    STANDALONE (default) or MULTUS.
-  CLUSTER_NAME       Cluster name (default: dra).
-  CLUSTER_VERSION    Kubernetes version (default: 1.36.1).
+  DRA_DRIVER_MODE        STANDALONE (default) or MULTUS.
+  GPU_PUBLISH_PCIE_ROOT  Helm gpuPublishPCIeRoot / plugin GPU_PUBLISH_PCIE_ROOT (true/false; default true).
+  PCIE_ROOTS             Comma-separated PCIe roots for fake GPUs (default: discover from SR-IOV ResourceSlices).
+  CLUSTER_NAME           Cluster name (default: dra).
+  CLUSTER_VERSION        Kubernetes version (default: 1.36.1).
+  CENTOS_IMAGE_URL  Override kcli centos9stream download URL (default: current
+                           cloud.centos.org GenericCloud-9-latest qcow2).
 EOF
       exit 0
       ;;
@@ -53,16 +57,6 @@ else
 fi
 
 sriov_network_name="${cluster_name}-sriov"
-
-check_requirements() {
-  local -a cmds=(kcli virsh podman make go)
-  for cmd in "${cmds[@]}"; do
-    if ! command -v "$cmd" &> /dev/null; then
-      echo "$cmd is not available"
-      exit 1
-    fi
-  done
-}
 
 # kcli delete wrapper; ignore failure only if output confirms the resource is absent.
 kcli_delete() {
@@ -87,6 +81,22 @@ cleanup() {
 create_networks() {
   kcli create network -c 192.168.120.0/24 "${network_name}"
   kcli create network -c "192.168.${virtual_router_id}.0/24" --nodhcp -i "${sriov_network_name}"
+}
+
+# kcli's built-in centos9stream URL still uses the pre-Image-Builder filename
+# (CentOS-Stream-GenericCloud-x86_64-9-latest...), which cloud.centos.org now 502s.
+# Prefetch with the current GenericCloud-9-latest name so cluster create can reuse it.
+ensure_centos9stream_image() {
+  local image="centos9stream"
+  local url="${CENTOS_IMAGE_URL:-https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2}"
+
+  if kcli list image 2>/dev/null | grep -Eiq "(^|[[:space:]])${image}([[:space:]]|$)"; then
+    echo "## Base image ${image} already present"
+    return 0
+  fi
+
+  echo "## Downloading ${image} from ${url}"
+  kcli download image -P "url=${url}" "${image}"
 }
 
 write_cluster_plan() {
@@ -199,16 +209,6 @@ label_nodes() {
     kubectl label node "${cluster_name}-worker-${num}.${domain_name}" \
       node-role.kubernetes.io/worker= --overwrite
   done
-}
-
-get_controller_ip() {
-  controller_ip=$(kubectl get node "${cluster_name}-ctlplane-0.${domain_name}" \
-    -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
-  if [[ -z "$controller_ip" ]]; then
-    echo "## ERROR: Failed to get controller IP"
-    kubectl get nodes -o wide
-    exit 1
-  fi
 }
 
 configure_host_registry() {
@@ -651,6 +651,9 @@ echo "## Creating networks"
 create_networks
 write_cluster_plan
 
+echo "## Ensuring centos9stream base image"
+ensure_centos9stream_image
+
 kcli create cluster generic --paramfile "./${cluster_name}-plan.yaml" "$cluster_name"
 
 export KUBECONFIG="$HOME/.kcli/clusters/$cluster_name/auth/kubeconfig"
@@ -700,6 +703,11 @@ deploy_dra_driver
 wait_for_dra_driver_daemonset
 
 verify_vfs_and_restart_driver
+
+echo "## Installing fake GPU driver (gpu.example.com)"
+export GPU_PUBLISH_PCIE_ROOT="${GPU_PUBLISH_PCIE_ROOT:-true}"
+"${root}/hack/install-dra-example-gpu-driver.sh"
+
 echo "## Cluster deployed successfully"
 
 echo "## KUBECONFIG=${KUBECONFIG}"

@@ -3,8 +3,6 @@
 package e2e_test
 
 import (
-	"strings"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -41,12 +39,7 @@ var _ = Describe("demo/multiple-vf-claim", Label(framework.LabelStandalone), Ser
 		clients.WaitForPodReady(ctx, ns, podName)
 
 		By("checking SR-IOV interfaces exists")
-		// multi-VF demo does not set ifName; driver auto-names the interfaces
-		out, err := clients.ExecInPod(ctx, ns, podName, container, "ip", "-o", "link", "show")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(out).NotTo(BeEmpty())
-		// claim requests 2 VFs: expect lo + eth0 + both workload interfaces
-		linkLines := strings.Split(strings.TrimSpace(out), "\n")
-		Expect(len(linkLines)).To(BeNumerically(">=", 4), "expected lo, eth0, and 2 VF interfaces:\n%s", out)
+		// multi-VF demo omits ifName; driver auto-names interfaces vfnet0, vfnet1
+		clients.ExpectPodLinkInterfacesExact(ctx, ns, podName, container, "lo", "eth0", "vfnet0", "vfnet1")
 	})
 })

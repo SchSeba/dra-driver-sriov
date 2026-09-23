@@ -40,6 +40,7 @@ jobs:
         with:
           driver-mode: ${{ matrix.mode }}
           single-node: "true"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run workload e2e tests
         uses: ./.github/actions/run-e2e-workloads
