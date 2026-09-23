@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	drapbv1 "k8s.io/kubelet/pkg/apis/dra/v1beta1"
+	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
 
 	"github.com/k8snetworkplumbingwg/dra-driver-sriov/pkg/flags"
 	"github.com/k8snetworkplumbingwg/dra-driver-sriov/pkg/podmanager"
@@ -110,15 +111,38 @@ var _ = Describe("PodManager", func() {
 		})
 
 		It("should handle invalid checkpoint directory", func() {
+			// Use a regular file path: checkpoint manager requires a directory and must
+			// fail even when tests run as root (which can mkdir missing paths).
+			notADir, err := os.CreateTemp("", "podmanager-notadir-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(notADir.Name())
+			Expect(notADir.Close()).To(Succeed())
+
 			invalidConfig := &draTypes.Config{
 				Flags: &draTypes.Flags{
-					KubeletPluginsDirectoryPath: "/invalid/path/that/does/not/exist",
+					KubeletPluginsDirectoryPath: notADir.Name(),
 				},
 			}
 
-			_, err := podmanager.NewPodManager(invalidConfig)
+			_, err = podmanager.NewPodManager(invalidConfig)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unable to create checkpoint manager"))
+		})
+	})
+
+	Context("NewPodManagerWithCheckpointManager", func() {
+		It("should create a pod manager from an injected checkpoint manager", func() {
+			cm, err := checkpointmanager.NewCheckpointManager(config.DriverPluginPath())
+			Expect(err).NotTo(HaveOccurred())
+
+			pm, err = podmanager.NewPodManagerWithCheckpointManager(cm)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pm).NotTo(BeNil())
+
+			Expect(pm.Set(podUID, claimUID, devices)).To(Succeed())
+			loaded, found := pm.Get(podUID, claimUID)
+			Expect(found).To(BeTrue())
+			Expect(loaded).To(HaveLen(len(devices)))
 		})
 	})
 
