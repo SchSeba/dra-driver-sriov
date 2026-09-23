@@ -9,10 +9,9 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	resourceapi "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -66,16 +65,13 @@ func (c *Clients) WaitForNamespaceGone(ctx context.Context, name string) {
 }
 
 // WaitForResourceClaimAllocated waits until a ResourceClaim has allocation results.
-func (c *Clients) WaitForResourceClaimAllocated(ctx context.Context, namespace, name string) *unstructured.Unstructured {
-	var claim *unstructured.Unstructured
+func (c *Clients) WaitForResourceClaimAllocated(ctx context.Context, namespace, name string) *resourceapi.ResourceClaim {
+	var claim *resourceapi.ResourceClaim
 	Eventually(func(g Gomega) {
 		var err error
-		claim, err = c.Dynamic.Resource(ResourceClaimGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+		claim, err = c.Clientset.ResourceV1().ResourceClaims(namespace).Get(ctx, name, metav1.GetOptions{})
 		g.Expect(err).NotTo(HaveOccurred())
-		status, found, err := unstructured.NestedMap(claim.Object, "status", "allocation")
-		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(found).To(BeTrue(), "claim %s/%s has no status.allocation", namespace, name)
-		g.Expect(status).NotTo(BeEmpty())
+		g.Expect(claim.Status.Allocation).NotTo(BeNil(), "claim %s/%s has no status.allocation", namespace, name)
 	}).WithTimeout(DefaultTimeout).WithPolling(DefaultInterval).Should(Succeed())
 	return claim
 }
@@ -83,16 +79,12 @@ func (c *Clients) WaitForResourceClaimAllocated(ctx context.Context, namespace, 
 // WaitForResourceSlicesWithDevices waits until at least one ResourceSlice publishes devices.
 func (c *Clients) WaitForResourceSlicesWithDevices(ctx context.Context) {
 	Eventually(func(g Gomega) {
-		list, err := c.Dynamic.Resource(schemaGroupVersionResource("resourceslices")).List(ctx, metav1.ListOptions{})
+		list, err := c.Clientset.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{})
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(list.Items).NotTo(BeEmpty(), "no ResourceSlices found")
 		total := 0
 		for _, item := range list.Items {
-			devices, found, err := unstructured.NestedSlice(item.Object, "spec", "devices")
-			g.Expect(err).NotTo(HaveOccurred())
-			if found {
-				total += len(devices)
-			}
+			total += len(item.Spec.Devices)
 		}
 		g.Expect(total).To(BeNumerically(">", 0), "ResourceSlices have no devices")
 	}).WithTimeout(DefaultTimeout).WithPolling(DefaultInterval).Should(Succeed())
@@ -100,19 +92,13 @@ func (c *Clients) WaitForResourceSlicesWithDevices(ctx context.Context) {
 
 // CountAllocatedDevicesInResourceSlices returns a rough count of devices across ResourceSlices.
 func (c *Clients) CountAllocatedDevicesInResourceSlices(ctx context.Context) (int, error) {
-	list, err := c.Dynamic.Resource(schemaGroupVersionResource("resourceslices")).List(ctx, metav1.ListOptions{})
+	list, err := c.Clientset.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return 0, err
 	}
 	total := 0
 	for _, item := range list.Items {
-		devices, found, err := unstructured.NestedSlice(item.Object, "spec", "devices")
-		if err != nil {
-			return 0, err
-		}
-		if found {
-			total += len(devices)
-		}
+		total += len(item.Spec.Devices)
 	}
 	return total, nil
 }
@@ -121,32 +107,16 @@ func (c *Clients) CountAllocatedDevicesInResourceSlices(ctx context.Context) (in
 // attributes[attrKey].string == want (e.g. sriovnetwork.../resourceName == eth1_resource).
 func (c *Clients) WaitForDeviceAttributeString(ctx context.Context, attrKey, want string) {
 	Eventually(func(g Gomega) {
-		list, err := c.Dynamic.Resource(schemaGroupVersionResource("resourceslices")).List(ctx, metav1.ListOptions{})
+		list, err := c.Clientset.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{})
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(list.Items).NotTo(BeEmpty(), "no ResourceSlices found")
 
 		found := false
+		key := resourceapi.QualifiedName(attrKey)
 		for _, item := range list.Items {
-			devices, ok, err := unstructured.NestedSlice(item.Object, "spec", "devices")
-			g.Expect(err).NotTo(HaveOccurred())
-			if !ok {
-				continue
-			}
-			for _, raw := range devices {
-				device, ok := raw.(map[string]any)
-				if !ok {
-					continue
-				}
-				attrs, ok, err := unstructured.NestedMap(device, "attributes")
-				g.Expect(err).NotTo(HaveOccurred())
-				if !ok {
-					continue
-				}
-				attr, ok := attrs[attrKey].(map[string]any)
-				if !ok {
-					continue
-				}
-				if s, _ := attr["string"].(string); s == want {
+			for _, device := range item.Spec.Devices {
+				s, ok := deviceAttributeString(device.Attributes, key)
+				if ok && s == want {
 					found = true
 					break
 				}
@@ -158,14 +128,6 @@ func (c *Clients) WaitForDeviceAttributeString(ctx context.Context, attrKey, wan
 		g.Expect(found).To(BeTrue(),
 			"no ResourceSlice device has attribute %q=%q yet", attrKey, want)
 	}).WithTimeout(DefaultTimeout).WithPolling(DefaultInterval).Should(Succeed())
-}
-
-func schemaGroupVersionResource(resource string) schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "resource.k8s.io",
-		Version:  "v1",
-		Resource: resource,
-	}
 }
 
 // PodNamesForDeployment returns pod names matching the deployment selector.

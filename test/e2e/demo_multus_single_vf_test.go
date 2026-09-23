@@ -3,8 +3,6 @@
 package e2e_test
 
 import (
-	"strings"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -50,11 +48,7 @@ var _ = Describe("demo/multus-integration-single-vf", Label(framework.LabelMultu
 		Expect(names).NotTo(BeEmpty())
 
 		By("checking secondary network interfaces exist")
-		out, err := clients.ExecInPod(ctx, ns, names[0], container, "ip", "-o", "link", "show")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(out).NotTo(BeEmpty())
-		// Multus NAD attaches one secondary interface beyond lo + eth0
-		linkLines := strings.Split(strings.TrimSpace(out), "\n")
-		Expect(len(linkLines)).To(BeNumerically(">=", 3), "expected lo, eth0, and 1 VF interface:\n%s", out)
+		// Multus annotation vf-test1 attaches as net1
+		clients.ExpectPodLinkInterfacesExact(ctx, ns, names[0], container, "lo", "eth0", "net1")
 	})
 })

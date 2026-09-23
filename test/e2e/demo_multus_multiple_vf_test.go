@@ -47,11 +47,7 @@ var _ = Describe("demo/multus-integration-multiple-vf", Label(framework.LabelMul
 		Expect(names).NotTo(BeEmpty())
 
 		By("checking secondary network interfaces exist")
-		out, err := clients.ExecInPod(ctx, ns, names[0], container, "ip", "-o", "link", "show")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(out).NotTo(BeEmpty())
 		// Multus annotation vf-test1,vf-test1 attaches as net1 and net2
-		Expect(out).To(ContainSubstring("net1"), "expected Multus interface net1:\n%s", out)
-		Expect(out).To(ContainSubstring("net2"), "expected Multus interface net2:\n%s", out)
+		clients.ExpectPodLinkInterfacesExact(ctx, ns, names[0], container, "lo", "eth0", "net1", "net2")
 	})
 })

@@ -9,10 +9,11 @@ import (
 	"github.com/k8snetworkplumbingwg/dra-driver-sriov/test/e2e/framework"
 )
 
-var _ = Describe("demo/resource-alignment", Label(framework.LabelStandalone, framework.LabelAlignment), Serial, Ordered, func() {
+var _ = Describe("demo/multus-integration-resource-alignment", Label(framework.LabelMultus, framework.LabelAlignment), Serial, Ordered, func() {
 	const (
-		ns               = "vf-test5"
+		ns               = "vf-test10"
 		podName          = "pod0"
+		container        = "ctr0"
 		podClaim         = "vf"
 		vfDeviceRequest  = "vf"
 		gpuDeviceRequest = "gpu"
@@ -21,17 +22,21 @@ var _ = Describe("demo/resource-alignment", Label(framework.LabelStandalone, fra
 	AfterEach(func() {
 		clients.Cleanup(ctx, framework.CleanupSpec{
 			Namespaces: []string{ns},
+			DeviceAttributes: []string{
+				"alignment-multus-attrs",
+			},
 			SriovResourcePolicies: []string{
 				"all-devices",
+				"alignment-multus-policy",
 			},
 		})
 	})
 
-	It("schedules a pod with PCIe root alignment constraints", func() {
-		clients.SkipUnlessStandalone(ctx)
+	It("schedules a Multus pod with PCIe root alignment constraints", func() {
+		clients.SkipUnlessMultus(ctx)
 		clients.SkipUnlessAlignment(ctx)
 
-		path, err := framework.DemoPath("resource-alignment", "resource-alignment.yaml")
+		path, err := framework.DemoPath("multus-integration-resource-alignment", "multus-integration-resource-alignment.yaml")
 		Expect(err).NotTo(HaveOccurred())
 
 		By("applying fixture")
@@ -46,5 +51,8 @@ var _ = Describe("demo/resource-alignment", Label(framework.LabelStandalone, fra
 
 		By("checking VF and GPU share pcieRoot via ResourceSlice attributes")
 		clients.ExpectResourceClaimRequestsSharePCIeRoot(ctx, ns, claimName, vfDeviceRequest, gpuDeviceRequest)
+
+		By("checking secondary network interface from Multus")
+		clients.ExpectPodLinkInterfacesExact(ctx, ns, podName, container, "lo", "eth0", "net1")
 	})
 })

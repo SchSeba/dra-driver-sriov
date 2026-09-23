@@ -8,7 +8,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // DebugDump writes diagnostic information to stderr.
@@ -48,13 +47,12 @@ func (c *Clients) DebugDump(ctx context.Context, namespaces ...string) {
 	}
 
 	fmt.Fprintln(w, "## ResourceSlices")
-	slices, err := c.Dynamic.Resource(schemaGroupVersionResource("resourceslices")).List(ctx, metav1.ListOptions{})
+	slices, err := c.Clientset.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		fmt.Fprintf(w, "  %v\n", err)
 	} else {
 		for _, s := range slices.Items {
-			devices, _, _ := unstructured.NestedSlice(s.Object, "spec", "devices")
-			fmt.Fprintf(w, "  %s devices=%d\n", s.GetName(), len(devices))
+			fmt.Fprintf(w, "  %s devices=%d\n", s.Name, len(s.Spec.Devices))
 		}
 	}
 
