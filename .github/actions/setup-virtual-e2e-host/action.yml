@@ -41,7 +41,8 @@ runs:
           virtinst bridge-utils \
           libguestfs-tools genisoimage \
           dnsmasq-base \
-          python3-pip
+          python3-pip \
+          jq
         sudo usermod -aG kvm,libvirt $USER
         sudo systemctl enable --now libvirtd
         sudo systemctl start virtlogd
