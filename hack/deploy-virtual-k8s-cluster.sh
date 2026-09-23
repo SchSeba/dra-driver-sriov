@@ -33,6 +33,8 @@ Environment:
   PCIE_ROOTS             Comma-separated PCIe roots for fake GPUs (default: discover from SR-IOV ResourceSlices).
   CLUSTER_NAME           Cluster name (default: dra).
   CLUSTER_VERSION        Kubernetes version (default: 1.36.1).
+  CENTOS_IMAGE_URL  Override kcli centos9stream download URL (default: current
+                           cloud.centos.org GenericCloud-9-latest qcow2).
 EOF
       exit 0
       ;;
@@ -79,6 +81,22 @@ cleanup() {
 create_networks() {
   kcli create network -c 192.168.120.0/24 "${network_name}"
   kcli create network -c "192.168.${virtual_router_id}.0/24" --nodhcp -i "${sriov_network_name}"
+}
+
+# kcli's built-in centos9stream URL still uses the pre-Image-Builder filename
+# (CentOS-Stream-GenericCloud-x86_64-9-latest...), which cloud.centos.org now 502s.
+# Prefetch with the current GenericCloud-9-latest name so cluster create can reuse it.
+ensure_centos9stream_image() {
+  local image="centos9stream"
+  local url="${CENTOS_IMAGE_URL:-https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2}"
+
+  if kcli list image 2>/dev/null | grep -Eiq "(^|[[:space:]])${image}([[:space:]]|$)"; then
+    echo "## Base image ${image} already present"
+    return 0
+  fi
+
+  echo "## Downloading ${image} from ${url}"
+  kcli download image -P "url=${url}" "${image}"
 }
 
 write_cluster_plan() {
@@ -632,6 +650,9 @@ cleanup
 echo "## Creating networks"
 create_networks
 write_cluster_plan
+
+echo "## Ensuring centos9stream base image"
+ensure_centos9stream_image
 
 kcli create cluster generic --paramfile "./${cluster_name}-plan.yaml" "$cluster_name"
 
