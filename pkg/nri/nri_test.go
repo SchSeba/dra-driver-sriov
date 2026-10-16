@@ -3,7 +3,6 @@ package nri
 import (
 	"context"
 	"errors"
-	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -17,6 +16,7 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	drapbv1 "k8s.io/kubelet/pkg/apis/dra/v1beta1"
+	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	cnimock "github.com/k8snetworkplumbingwg/dra-driver-sriov/pkg/cni/mock"
@@ -31,6 +31,33 @@ type fakeMetadataUpdater struct {
 	requestName string
 	devices     []kubeletplugin.Device
 	err         error
+}
+
+// togglableCheckpointManager simulates checkpoint persistence failures in unit tests.
+// Making checkpoint.json immutable (chattr +i) is unreliable in CI: runners often lack
+// CAP_LINUX_IMMUTABLE. Injecting CreateCheckpoint errors is deterministic.
+type togglableCheckpointManager struct {
+	delegate   checkpointmanager.CheckpointManager
+	failCreate bool
+}
+
+func (t *togglableCheckpointManager) CreateCheckpoint(checkpointKey string, checkpoint checkpointmanager.Checkpoint) error {
+	if t.failCreate {
+		return errors.New("simulated checkpoint sync failure")
+	}
+	return t.delegate.CreateCheckpoint(checkpointKey, checkpoint)
+}
+
+func (t *togglableCheckpointManager) GetCheckpoint(checkpointKey string, checkpoint checkpointmanager.Checkpoint) error {
+	return t.delegate.GetCheckpoint(checkpointKey, checkpoint)
+}
+
+func (t *togglableCheckpointManager) RemoveCheckpoint(checkpointKey string) error {
+	return t.delegate.RemoveCheckpoint(checkpointKey)
+}
+
+func (t *togglableCheckpointManager) ListCheckpoints() ([]string, error) {
+	return t.delegate.ListCheckpoints()
 }
 
 func (f *fakeMetadataUpdater) UpdateRequestMetadata(
@@ -496,7 +523,10 @@ var _ = Describe("NRI updateNetworkDeviceData ordering", func() {
 				KubeletPluginsDirectoryPath: GinkgoT().TempDir(),
 			},
 		}
-		pm, err := podmanager.NewPodManager(cfg)
+		realCM, err := checkpointmanager.NewCheckpointManager(cfg.DriverPluginPath())
+		Expect(err).NotTo(HaveOccurred())
+		cm := &togglableCheckpointManager{delegate: realCM}
+		pm, err := podmanager.NewPodManagerWithCheckpointManager(cm)
 		Expect(err).NotTo(HaveOccurred())
 
 		claimUID := k8stypes.UID("claim-a-uid")
@@ -542,11 +572,9 @@ var _ = Describe("NRI updateNetworkDeviceData ordering", func() {
 				Client:    ctrlclientfake.NewClientBuilder().WithScheme(flags.Scheme).WithRuntimeObjects(claim.DeepCopy()).Build(),
 			},
 		}
-		// Simulate real persistence failure by removing write permissions before update.
-		Expect(os.Chmod(cfg.DriverPluginPath(), 0o500)).To(Succeed())
-		DeferCleanup(func() {
-			_ = os.Chmod(cfg.DriverPluginPath(), 0o700)
-		})
+
+		// Simulate checkpoint sync failure only when updateNetworkDeviceData persists network data, after setup syncs succeeded.
+		cm.failCreate = true
 
 		networkDataList := types.NetworkDataChanStructList{
 			{
@@ -562,6 +590,10 @@ var _ = Describe("NRI updateNetworkDeviceData ordering", func() {
 		Expect(updatedClaim.Status.Devices).To(HaveLen(1))
 		Expect(updatedClaim.Status.Devices[0].NetworkData).To(BeNil())
 		Expect(updatedClaim.Status.Devices[0].Data).To(BeNil())
+
+		stored, found := pm.Get(podUID, claimUID)
+		Expect(found).To(BeTrue())
+		Expect(stored[0].NetworkDeviceData).To(BeNil(), "the store must not hold what the checkpoint does not")
 	})
 
 	It("updates claim status after checkpoint persistence succeeds", func() {
@@ -645,5 +677,75 @@ var _ = Describe("NRI updateNetworkDeviceData ordering", func() {
 		Expect(updatedPreparedDevices).To(HaveLen(1))
 		Expect(updatedPreparedDevices[0].NetworkDeviceData).NotTo(BeNil())
 		Expect(updatedPreparedDevices[0].NetworkDeviceData.InterfaceName).To(Equal("net1"))
+	})
+
+	It("skips a claim that was recreated under the same name", func() {
+		cfg := &types.Config{
+			Flags: &types.Flags{
+				KubeletPluginsDirectoryPath: GinkgoT().TempDir(),
+			},
+		}
+		pm, err := podmanager.NewPodManager(cfg)
+		Expect(err).NotTo(HaveOccurred())
+
+		preparedFor := k8stypes.UID("claim-a-uid")
+		podUID := k8stypes.UID("pod-a-uid")
+		prepared := types.PreparedDevices{
+			{
+				ClaimNamespacedName: kubeletplugin.NamespacedObject{
+					NamespacedName: k8stypes.NamespacedName{
+						Namespace: "default",
+						Name:      "claim-a",
+					},
+					UID: preparedFor,
+				},
+				Device: drapbv1.Device{
+					PoolName:   "pool-a",
+					DeviceName: "dev-a",
+				},
+			},
+		}
+		Expect(pm.Set(podUID, preparedFor, prepared)).To(Succeed())
+
+		// Same name, different object: the claim these devices were prepared for
+		// is gone and this one belongs to whoever recreated it.
+		replacement := &resourceapi.ResourceClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "claim-a",
+				Namespace: "default",
+				UID:       k8stypes.UID("claim-a-uid-2"),
+			},
+			Status: resourceapi.ResourceClaimStatus{
+				Devices: []resourceapi.AllocatedDeviceStatus{
+					{
+						Driver: consts.DriverName,
+						Pool:   "pool-a",
+						Device: "dev-a",
+					},
+				},
+			},
+		}
+
+		plugin := &Plugin{
+			podManager: pm,
+			k8sClient: flags.ClientSets{
+				Interface: k8sfake.NewSimpleClientset(replacement.DeepCopy()),
+				Client:    ctrlclientfake.NewClientBuilder().WithScheme(flags.Scheme).WithRuntimeObjects(replacement.DeepCopy()).Build(),
+			},
+		}
+
+		networkDataList := types.NetworkDataChanStructList{
+			{
+				PreparedDevice:    prepared[0],
+				NetworkDeviceData: &resourceapi.NetworkDeviceData{InterfaceName: "net1"},
+			},
+		}
+
+		plugin.updateNetworkDeviceData(context.Background(), networkDataList)
+
+		got, err := plugin.k8sClient.ResourceV1().ResourceClaims("default").Get(context.Background(), "claim-a", metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status.Devices).To(HaveLen(1))
+		Expect(got.Status.Devices[0].NetworkData).To(BeNil(), "the replacement claim must not take the old claim's network data")
 	})
 })

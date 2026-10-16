@@ -1,0 +1,30 @@
+name: Deploy virtual cluster
+description: Deploy a kcli virtual Kubernetes cluster with the DRA SR-IOV driver and gpu.example.com example driver
+
+inputs:
+  driver-mode:
+    description: DRA driver mode (standalone or multus)
+    required: true
+  single-node:
+    description: Deploy a single-node cluster when true
+    required: false
+    default: "false"
+  github-token:
+    description: GitHub token for kcli GitHub API calls (flannel version lookup)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy virtual cluster and DRA driver
+      shell: bash
+      run: |
+        deploy_args=()
+        if [[ "${{ inputs.single-node }}" == "true" ]]; then
+          deploy_args+=(--single-node)
+        fi
+        sudo -E env "PATH=$PATH" "HOME=/root" \
+          "DRA_DRIVER_MODE=$(echo '${{ inputs.driver-mode }}' | tr '[:lower:]' '[:upper:]')" \
+          "GITHUB_TOKEN=${{ inputs.github-token }}" \
+          bash hack/deploy-virtual-k8s-cluster.sh "${deploy_args[@]}"

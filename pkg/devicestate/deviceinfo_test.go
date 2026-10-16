@@ -286,6 +286,7 @@ var _ = Describe("DeviceInfo compatibility", Serial, func() {
 
 		mockHost.EXPECT().BindDeviceDriver("0000:01:00.1", gomock.Any()).Return("ixgbevf", nil)
 		mockHost.EXPECT().GetVFIODeviceFile("0000:01:00.1").Return("/dev/vfio/1", "/dev/vfio/1", nil)
+		// iommuAvailable is false (zero value), so GetVFIOCdevPath is not probed for.
 		mockHost.EXPECT().GetRDMADevicesForPCI("0000:01:00.1").Return([]string{})
 		mockHost.EXPECT().RestoreDeviceDriver("0000:01:00.1", "ixgbevf").Return(nil)
 
