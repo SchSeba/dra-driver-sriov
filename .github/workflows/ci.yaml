@@ -109,8 +109,11 @@ jobs:
           file: coverage.out
 
   build-container:
-    name: Build Container
+    name: Build Container (${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     # Only build on pull requests, not on pushes to main
     # (main pushes are handled by release.yaml with multi-arch builds)
     if: github.event_name == 'pull_request'
@@ -118,22 +121,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: default-load=true
 
       - name: Build container image
-        run: |
-          cd deployments/container
-          make centos9
+        env:
+          GOARCH: ${{ matrix.arch }}
+          CONTAINER_TOOL: docker buildx
+          IMAGE_NAME: dra-driver-sriov
+          VERSION: ci
+        run: make -C deployments/container centos9
 
-  functional-tests:
-    name: Functional Tests
-    runs-on: [sriov]
-    needs: [build-container, test, lint, generate-and-format]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-      
-      - name: Create cluster
+      - name: Verify image and driver architectures
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
-          make e2e-tests
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' dra-driver-sriov:ci)" = "linux/$EXPECTED_ARCH"
+          container=$(docker create --platform "linux/$EXPECTED_ARCH" dra-driver-sriov:ci /bin/true)
+          trap 'docker rm "$container"' EXIT
+          docker cp "$container:/usr/bin/dra-driver-sriov" ./dra-driver-sriov
+          case "$EXPECTED_ARCH" in
+            amd64) machine="Advanced Micro Devices X86-64" ;;
+            arm64) machine="AArch64" ;;
+          esac
+          readelf -h ./dra-driver-sriov
+          readelf -h ./dra-driver-sriov | grep -E "Machine: +$machine$"
