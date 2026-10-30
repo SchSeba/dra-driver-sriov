@@ -25,9 +25,12 @@ type Handler struct {
 	cache *cdiapi.Cache
 }
 
+// NewHandler returns a Handler that writes and removes CDI Spec files.
 func NewHandler(cdiRootPath string) (*Handler, error) {
+	// Nothing reads this cache back, so the auto-refresh watcher is unnecessary.
 	cache, err := cdiapi.NewCache(
 		cdiapi.WithSpecDirs(cdiRootPath),
+		cdiapi.WithAutoRefresh(false),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a new CDI cache: %w", err)
@@ -56,7 +59,7 @@ func (cdi *Handler) CreateCommonSpecFile() error {
 		},
 	}
 
-	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
+	minVersion, err := cdispec.MinimumRequiredVersion(spec)
 	if err != nil {
 		return fmt.Errorf("failed to get minimum required CDI spec version: %v", err)
 	}
@@ -87,7 +90,7 @@ func (cdi *Handler) CreateClaimSpecFile(preparedDevices types.PreparedDevices) e
 
 		spec.Devices = append(spec.Devices, cdiDevice)
 	}
-	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
+	minVersion, err := cdispec.MinimumRequiredVersion(spec)
 	if err != nil {
 		return fmt.Errorf("failed to get minimum required CDI spec version: %v", err)
 	}
@@ -112,7 +115,7 @@ func (cdi *Handler) CreateGlobalPodSpecFile(podUID string, pciAddresses []string
 		Devices: []cdispec.Device{cdiDevice},
 	}
 
-	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
+	minVersion, err := cdispec.MinimumRequiredVersion(spec)
 	if err != nil {
 		return fmt.Errorf("failed to get minimum required CDI spec version: %v", err)
 	}
