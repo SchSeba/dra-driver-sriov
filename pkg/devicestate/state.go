@@ -42,6 +42,7 @@ type Manager struct {
 	// device key also indicates that the device is advertised (policy-matched).
 	policyAttrKeys    map[string]map[resourceapi.QualifiedName]bool
 	configurationMode string
+	iommuAvailable    bool
 }
 
 // NewManager creates a new device-state manager and initializes allocatable SR-IOV devices.
@@ -77,6 +78,7 @@ func NewManager(config *drasriovtypes.Config, cdi *cdi.Handler, deviceInfoStore 
 		deviceInfoStore:        deviceInfoStore,
 		allocatable:            allocatable,
 		configurationMode:      configurationMode,
+		iommuAvailable:         host.GetHelpers().IsIommufdAvailable(),
 	}
 
 	return state, nil
@@ -176,6 +178,9 @@ func (s *Manager) prepareDevices(ctx context.Context, ifNameIndex *int,
 
 		config, ok := resultsConfig[result.Request]
 		if !ok {
+			config, ok = resultsConfig[""]
+		}
+		if !ok {
 			config = configapi.DefaultVfConfig()
 		}
 
@@ -196,12 +201,16 @@ func (s *Manager) prepareDevices(ctx context.Context, ifNameIndex *int,
 			logger.Error(err, "error marshaling config", "config", config)
 			rawConfig = []byte("{}")
 		}
-		// Add applied config to device
-		claim.Status.Devices = append(claim.Status.Devices, resourceapi.AllocatedDeviceStatus{
-			Device: result.Device,
-			Pool:   result.Pool,
-			Driver: result.Driver,
-			Data:   &runtime.RawExtension{Raw: rawConfig},
+		// Record the applied config as this device's status. Upsert instead of
+		// append: a claim reused by another pod, or re-prepared after a restart,
+		// can already carry this device, and a duplicate (driver, pool, device,
+		// share ID) key makes the whole status update fail validation.
+		claim.Status.Devices = drasriovtypes.UpsertDeviceStatus(claim.Status.Devices, resourceapi.AllocatedDeviceStatus{
+			Device:  result.Device,
+			Pool:    result.Pool,
+			Driver:  result.Driver,
+			ShareID: (*string)(result.ShareID),
+			Data:    &runtime.RawExtension{Raw: rawConfig},
 		})
 		preparedDevices = append(preparedDevices, preparedDevice)
 	}
@@ -301,8 +310,35 @@ func (s *Manager) applyConfigOnDevice(ctx context.Context, ifNameIndex *int, cla
 			Type:     "c", // character device
 		})
 
+		// Add VFIO cdev device node and /dev/iommu for iommufd-capable kernels.
+		// The cdev is only useful to a workload when /dev/iommu is also present,
+		// so both are gated on iommuAvailable, which is checked once at driver
+		// startup (its value only changes on host reboot, not per allocation).
+		var cdevPath string
+		if s.iommuAvailable {
+			cdevPath, err = host.GetHelpers().GetVFIOCdevPath(pciAddress)
+			if err != nil {
+				return nil, restoreDriverOnError(fmt.Errorf("error getting VFIO cdev for device %s: %w", pciAddress, err))
+			}
+			if cdevPath != "" {
+				deviceNodes = append(deviceNodes, &cdispec.DeviceNode{
+					Path:     cdevPath,
+					HostPath: cdevPath,
+					Type:     "c",
+				})
+			}
+
+			deviceNodes = append(deviceNodes, &cdispec.DeviceNode{
+				Path:     "/dev/iommu",
+				HostPath: "/dev/iommu",
+				Type:     "c",
+			})
+		}
+
 		envs = append(envs, fmt.Sprintf("SRIOVNETWORK_%s_VFIO_DEVICE=%s", strings.ReplaceAll(result.Device, "-", "_"), devFileContainer))
-		logger.V(2).Info("Added VFIO device nodes for device", "device", pciAddress, "hostPath", devFileHost, "containerPath", devFileContainer)
+		logger.V(2).Info("Added VFIO device nodes for device", "device", pciAddress,
+			"hostPath", devFileHost, "containerPath", devFileContainer,
+			"cdevPath", cdevPath, "iommuAvailable", s.iommuAvailable)
 	}
 
 	// if addVhostMount is true, we add a volume mount for the vhost device
@@ -386,8 +422,8 @@ func (s *Manager) handleRDMADevice(ctx context.Context, deviceInfo resourceapi.D
 	rdmaDevices := host.GetHelpers().GetRDMADevicesForPCI(pciAddress)
 
 	if len(rdmaDevices) == 0 {
-		logger.V(2).Info("No RDMA devices found for PCI address", "device", pciAddress)
-		return nil, nil, fmt.Errorf("no RDMA devices found for PCI address %s", pciAddress)
+		logger.V(2).Info("No RDMA devices found for PCI address (device may be bound to vfio-pci)", "device", pciAddress)
+		return nil, nil, nil
 	}
 
 	if len(rdmaDevices) > 1 {
