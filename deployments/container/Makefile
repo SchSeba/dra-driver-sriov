@@ -17,7 +17,7 @@ CONTAINER_TOOL ?= docker
 MKDIR ?= mkdir
 DISTRIBUTIONS := centos9
 DOCKERFILE := $(CURDIR)/Dockerfile
-GOARCH ?= amd64
+GOARCH ?= $(shell go env GOARCH)
 
 include $(CURDIR)/../../common.mk
 
@@ -30,11 +30,11 @@ centos9: BASE_IMAGE = quay.io/centos/centos:stream9
 $(DISTRIBUTIONS):
 	DOCKER_BUILDKIT=1 \
 		$(CONTAINER_TOOL) build --pull \
+		--platform=linux/$(GOARCH) \
 		--tag $(IMAGE_NAME):$(VERSION) \
 		--build-arg GOLANG_VERSION="$(GOLANG_VERSION)" \
 		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
 		--build-arg VERSION="$(VERSION)" \
-		--build-arg GOARCH="$(GOARCH)" \
 		-f $(DOCKERFILE) \
 		$(CURDIR)/../..
 

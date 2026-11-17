@@ -1,0 +1,111 @@
+# DeviceAttributes for Multus: resourceName must match the NAD annotation.
+apiVersion: sriovnetwork.k8snetworkplumbingwg.io/v1alpha1
+kind: DeviceAttributes
+metadata:
+  name: alignment-multus-attrs
+  namespace: dra-driver-sriov
+  labels:
+    pool: alignment_multus
+spec:
+  attributes:
+    k8s.cni.cncf.io/resourceName:
+      string: "sriov_nic_align"
+---
+apiVersion: sriovnetwork.k8snetworkplumbingwg.io/v1alpha1
+kind: SriovResourcePolicy
+metadata:
+  name: alignment-multus-policy
+  namespace: dra-driver-sriov
+spec:
+  configs:
+  - deviceAttributesSelector:
+      matchLabels:
+        pool: alignment_multus
+    resourceFilters:
+    - {}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vf-test10
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vf-test1
+  namespace: vf-test10
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName: sriov_nic_align
+spec:
+  config: |-
+    {
+        "cniVersion": "1.0.0",
+        "name": "vf-test1",
+        "type": "sriov",
+        "vlan": 0,
+        "spoofchk": "on",
+        "trust": "on",
+        "vlanQoS": 0,
+        "logLevel": "info",
+        "ipam": {
+            "type": "host-local",
+            "ranges": [
+                [
+                    {
+                        "subnet": "10.0.10.0/24"
+                    }
+                ]
+            ]
+        }
+    }
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: vf-test10
+  name: resource-alignment-multus
+spec:
+  spec:
+    devices:
+      requests:
+      - name: vf
+        exactly:
+          deviceClassName: sriovnetwork.k8snetworkplumbingwg.io
+      - name: gpu
+        exactly:
+          deviceClassName: gpu.example.com
+          count: 1
+      constraints:
+        - matchAttribute: "resource.kubernetes.io/pcieRoot"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: vf-test10
+  name: pod0
+  labels:
+    app: pod
+  annotations:
+    k8s.v1.cni.cncf.io/networks: vf-test1
+spec:
+  terminationGracePeriodSeconds: 2
+  containers:
+  - name: ctr0
+    image: quay.io/schseba/toolbox:latest
+    command:
+      - /bin/bash
+      - -c
+      - sleep INF
+    securityContext:
+      runAsUser: 0
+      allowPrivilegeEscalation: true
+      capabilities:
+        add:
+          - NET_ADMIN
+          - NET_RAW
+    resources:
+      claims:
+      - name: vf
+  resourceClaims:
+  - name: vf
+    resourceClaimTemplateName: resource-alignment-multus

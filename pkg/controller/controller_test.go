@@ -10,6 +10,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	resourcev1 "k8s.io/api/resource/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -199,16 +200,21 @@ var _ = Describe("SriovResourcePolicyReconciler (envtest)", func() {
 	})
 
 	It("should apply DeviceAttributes when selector matches", func(ctx SpecContext) {
-		// Clean up existing policies
+		// Clean up existing policies from earlier specs so only the attrs policy remains.
 		for _, name := range []string{"rp-empty-selector", "rp-duplicate"} {
 			rp := &sriovdrav1alpha1.SriovResourcePolicy{}
 			if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: "dra-driver-sriov", Name: name}, rp); err == nil {
-				_ = k8sClient.Delete(ctx, rp)
+				Expect(k8sClient.Delete(ctx, rp)).To(Succeed())
 			}
 		}
 
-		// Wait for deletion
-		time.Sleep(500 * time.Millisecond)
+		Eventually(func(g Gomega) {
+			for _, name := range []string{"rp-empty-selector", "rp-duplicate"} {
+				rp := &sriovdrav1alpha1.SriovResourcePolicy{}
+				err := k8sClient.Get(ctx, client.ObjectKey{Namespace: "dra-driver-sriov", Name: name}, rp)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 
 		resName := "my-pool"
 		da := &sriovdrav1alpha1.DeviceAttributes{
@@ -246,7 +252,7 @@ var _ = Describe("SriovResourcePolicyReconciler (envtest)", func() {
 				}
 			}
 			return false
-		}, 5*time.Second, 200*time.Millisecond).Should(BeTrue())
+		}, 15*time.Second, 200*time.Millisecond).Should(BeTrue())
 	})
 
 	It("should requeue when node is missing (direct Reconcile call)", func(ctx SpecContext) {

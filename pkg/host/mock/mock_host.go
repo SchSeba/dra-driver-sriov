@@ -216,6 +216,21 @@ func (mr *MockInterfaceMockRecorder) GetRDMADevicesForPCI(pciAddr any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRDMADevicesForPCI", reflect.TypeOf((*MockInterface)(nil).GetRDMADevicesForPCI), pciAddr)
 }
 
+// GetVFIOCdevPath mocks base method.
+func (m *MockInterface) GetVFIOCdevPath(pciAddress string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVFIOCdevPath", pciAddress)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVFIOCdevPath indicates an expected call of GetVFIOCdevPath.
+func (mr *MockInterfaceMockRecorder) GetVFIOCdevPath(pciAddress any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVFIOCdevPath", reflect.TypeOf((*MockInterface)(nil).GetVFIOCdevPath), pciAddress)
+}
+
 // GetVFIODeviceFile mocks base method.
 func (m *MockInterface) GetVFIODeviceFile(pciAddress string) (string, string, error) {
 	m.ctrl.T.Helper()
@@ -259,6 +274,20 @@ func (m *MockInterface) IsDpdkDriver(driver string) bool {
 func (mr *MockInterfaceMockRecorder) IsDpdkDriver(driver any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDpdkDriver", reflect.TypeOf((*MockInterface)(nil).IsDpdkDriver), driver)
+}
+
+// IsIommufdAvailable mocks base method.
+func (m *MockInterface) IsIommufdAvailable() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsIommufdAvailable")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsIommufdAvailable indicates an expected call of IsIommufdAvailable.
+func (mr *MockInterfaceMockRecorder) IsIommufdAvailable() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsIommufdAvailable", reflect.TypeOf((*MockInterface)(nil).IsIommufdAvailable))
 }
 
 // IsKernelModuleLoaded mocks base method.

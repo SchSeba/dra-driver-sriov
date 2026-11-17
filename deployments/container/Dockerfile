@@ -18,16 +18,17 @@ ARG BASE_IMAGE=undefined
 # Build stage using native architecture to avoid emulation issues during Go compilation
 FROM --platform=$BUILDPLATFORM golang:${GOLANG_VERSION} AS build
 
-ARG GOARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /go/src/github.com/k8snetworkplumbingwg/dra-driver-sriov
 COPY . .
 
 RUN mkdir /artifacts
-RUN GOARCH=${GOARCH} make PREFIX=/artifacts cmds
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} make PREFIX=/artifacts cmds
 
 # Final stage using target architecture
-FROM --platform=linux/amd64 ${BASE_IMAGE}
+FROM --platform=$TARGETPLATFORM ${BASE_IMAGE}
 
 LABEL org.opencontainers.image.source=https://github.com/k8snetworkplumbingwg/dra-driver-sriov
 LABEL org.opencontainers.image.description="Dynamic Resource Allocation (DRA) resource driver for SR-IOV devices"
@@ -46,5 +47,5 @@ LABEL release="N/A"
 LABEL summary="Dynamic Resource Allocation (DRA) resource driver for SR-IOV devices"
 LABEL description="See summary"
 
-RUN yum -y install hwdata pciutils delve && yum clean all
+RUN yum -y install hwdata pciutils && yum clean all
 COPY --from=build /artifacts/dra-driver-sriov /usr/bin/dra-driver-sriov
